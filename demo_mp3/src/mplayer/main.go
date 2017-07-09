@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"mlib"
-	"mp"
+	"golang_demo/demo_mp3/src/mlib"
+	"golang_demo/demo_mp3/src/mp"
 )
 
 var lib *mlib.MusicManager
