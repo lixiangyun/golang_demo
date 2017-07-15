@@ -12,7 +12,6 @@ import (
 )
 
 var lib *mlib.MusicManager
-
 var id int = 1
 var ctrl, signal chan int
 
