@@ -36,6 +36,7 @@ func Help(args []string) int {
 
 func Quit(args []string) int {
 	fmt.Println("quit game...")
+	os.Exit(0)
 	return 0
 }
 

@@ -44,7 +44,11 @@ func (s *IpcServer) Response(c chan string) {
 			return
 		}
 
+		fmt.Println("request: ", req)
+
 		resp := s.Server.Handle(req.Method, req.Params)
+
+		fmt.Println("response: ", resp)
 
 		b, err := json.Marshal(resp)
 

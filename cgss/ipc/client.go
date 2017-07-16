@@ -2,6 +2,7 @@ package ipc
 
 import (
 	"encoding/json"
+	"fmt"
 )
 
 type IpcClient struct {
@@ -24,9 +25,13 @@ func (c *IpcClient) Call(m, p string) (resp *Response, err error) {
 		return
 	}
 
+	fmt.Println("Requst2 : ", string(b))
+
 	c.conn <- string(b)
 
 	str := <-c.conn // 等待回应
+
+	fmt.Println("Response2 : ", str)
 
 	var resp1 Response
 

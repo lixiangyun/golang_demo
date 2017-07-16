@@ -126,10 +126,3 @@ func (s *ConterServer) Handle(m, p string) *ipc.Response {
 func (s *ConterServer) Name() string {
 	return "CenterServer"
 }
-
-func NewConterServer() *ConterServer {
-	s := make(map[string]ipc.Server)
-	p := make([]*Player, 0)
-
-	return &ConterServer{servers: s, players: p}
-}
