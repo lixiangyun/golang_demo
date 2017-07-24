@@ -25,7 +25,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "POST" {
-		f, h, err := r.FormFile("images")
+		f, h, err := r.FormFile("image")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
