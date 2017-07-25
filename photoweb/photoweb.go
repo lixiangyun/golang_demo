@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"runtime/debug"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		err := renderHtml(w, "upload", nil)
+		err := renderHtml(w, "upload.html", nil)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -88,7 +89,7 @@ func listHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	locals["images"] = images
-	err = renderHtml(w, "list", locals)
+	err = renderHtml(w, "list.html", locals)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -123,16 +124,51 @@ func init() {
 		log.Println("Loading template:", templatePath)
 
 		t := template.Must(template.ParseFiles(templatePath))
-		templates[templatePath] = t
+		templates[templateName] = t
 	}
 }
 
-func main() {
-	http.HandleFunc("/upload", uploadHandler)
-	http.HandleFunc("/view", viewHandler)
-	http.HandleFunc("/", listHandler)
+func safeHandler(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if e, ok := recover().(error); ok {
+				http.Error(w, e.Error(), http.StatusInternalServerError)
+				// 可以自定义50x错误页面
+				log.Println("Warning: Panic in %v - %v", fn, e)
+				log.Println(string(debug.Stack()))
+			}
+		}()
 
-	err := http.ListenAndServe(":8080", nil)
+		fn(w, r)
+	}
+}
+
+const (
+	ListDir = 0x0001
+)
+
+func staticDirHandler(mux *http.ServeMux, prefix string, staticDir string, flags int) {
+	mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
+		file := staticDir + r.URL.Path[len(prefix)-1:]
+		if (flags & ListDir) == 0 {
+			if exists := isExists(file); !exists {
+				http.NotFound(w, r)
+			}
+		}
+		http.ServeFile(w, r, file)
+	})
+}
+
+func main() {
+
+	mux := http.NewServeMux()
+	staticDirHandler(mux, "/assets/", "./public", 0)
+
+	mux.HandleFunc("/upload", safeHandler(uploadHandler))
+	mux.HandleFunc("/view", safeHandler(viewHandler))
+	mux.HandleFunc("/", safeHandler(listHandler))
+
+	err := http.ListenAndServe(":8080", mux)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err.Error())
 	}
