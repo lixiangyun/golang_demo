@@ -1,0 +1,5 @@
+D:/Go/bin/go.exe build -i [D:/golang/src/golang_demo/demo6/demo6.5]
+成功: 进程退出代码 0.
+D:/golang/src/golang_demo/demo6/demo6.5/demo6.5.exe  [D:/golang/src/golang_demo/demo6/demo6.5]
+70af690adf124b2e828b4d8904ad142a
+49d37c25ef2a62b4cfcf3689c649510390e14875
