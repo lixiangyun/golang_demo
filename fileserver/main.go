@@ -6,5 +6,5 @@ import (
 
 func main() {
 	h := http.FileServer(http.Dir("../"))
-	http.ListenAndServe(":8001", h)
+	http.ListenAndServeTLS(":8080", "server.crt", "server.key", h)
 }
