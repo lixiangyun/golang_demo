@@ -37,3 +37,8 @@ func TestBubbleSort3(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkSort(t *testing.B) {
+	values := []int{5, 5, 3, 2, 1, 0, 34, 5, 2, 3, 46, 0}
+	QuickSort(values)
+}

@@ -2,19 +2,15 @@
 package main
 
 import (
-	"bubblesort"
-	"time"
-)
-
-import "qsort"
-
-import (
 	"bufio"
 	"flag"
 	"fmt"
+	"golang_demo/sorter/src/bubblesort"
+	"golang_demo/sorter/src/qsort"
 	"io"
 	"os"
 	"strconv"
+	"time"
 )
 
 var infile *string = flag.String("i", "unsort.dat", "File contains values for sorting.")
