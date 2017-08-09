@@ -16,24 +16,16 @@ func main() {
 	}
 
 	for _, ch := range que {
-		id, _ := <-ch
-		fmt.Println("RecvCnt : ", id)
+		id, b := <-ch
+		fmt.Println("RecvCnt : ", id, b)
 	}
-	
-	ch1 := make(chan int ,1)
-	
+
+	ch1 := make(chan int, 1)
+
 	for {
-		switch {
-			case ch1<-1:
-			fmt.Println()
-			case ch1<-0:
-			fmt.Println()
-			default:
-			fmt.Println()
-		}
-		
-		i:= <- ch1
-		
+
+		i := <-ch1
+
 		fmt.Println(" i : ", i)
 	}
 }

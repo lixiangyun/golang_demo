@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -95,6 +96,9 @@ func Client() {
 }
 
 func main() {
+
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
 	args := os.Args
 
 	if len(args) < 2 {
