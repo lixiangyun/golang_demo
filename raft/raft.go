@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -16,23 +17,24 @@ const (
 )
 
 const (
-	TIMEOUT   = 10 * time.Second
+	TIMEOUT   = 5 * time.Second
 	KEEPALIVE = 1 * time.Second
 	LEADVOTE  = 127 * time.Millisecond
 )
 
 type LeaderInfo struct {
-	servername string
-	term       uint64
+	ServerName string
+	Term       uint64
 }
 
 type HeartInfo struct {
-	servername string
+	Servername string
 	timeout    time.Duration
 }
 
 type RAFT struct {
 	role      int
+	port      string
 	name      string
 	othername map[string]string
 	leader    string
@@ -47,14 +49,6 @@ type RAFT struct {
 var raft RAFT
 
 func (r *RAFT) RequestVote(l *LeaderInfo, b *bool) error {
-
-	return nil
-}
-
-func (r *RAFT) AppendEntries(l *LeaderInfo, b *bool) error {
-
-	*b = false
-
 	switch r.role {
 	case ROLE_LEADER:
 		{
@@ -63,13 +57,15 @@ func (r *RAFT) AppendEntries(l *LeaderInfo, b *bool) error {
 
 	case ROLE_CANDIDATE:
 		{
-			if l.term > r.currentTerm {
-				// TBD
+			if l.Term > r.currentTerm && r.leader == "" {
+
+				r.leader = l.ServerName
+				r.currentTerm = l.Term
 				r.role = ROLE_FOLLOWER
+				r.timeout = time.NewTimer(TIMEOUT)
+				go TimeOut(raft.timeout)
 
-				r.leader = l.servername
-
-				r.currentTerm = l.term
+				r.leaderVote.Stop()
 
 				*b = true
 
@@ -80,14 +76,85 @@ func (r *RAFT) AppendEntries(l *LeaderInfo, b *bool) error {
 
 	case ROLE_FOLLOWER:
 		{
-			*b = true
+			if r.leader == "" {
+				r.leader = l.ServerName
+				r.currentTerm = l.Term
+				r.timeout.Reset(TIMEOUT)
+
+				*b = true
+			} else {
+				*b = false
+			}
 		}
+	default:
+		*b = false
+	}
+	return nil
+}
+
+func (r *RAFT) AppendEntries(l *LeaderInfo, b *bool) error {
+	switch r.role {
+	case ROLE_LEADER:
+		{
+			*b = false
+		}
+
+	case ROLE_CANDIDATE:
+		{
+			if l.Term > r.currentTerm && r.leader == "" {
+
+				r.leader = l.ServerName
+				r.currentTerm = l.Term
+				r.role = ROLE_FOLLOWER
+				r.timeout = time.NewTimer(TIMEOUT)
+				go TimeOut(raft.timeout)
+
+				r.leaderVote.Stop()
+
+				*b = true
+
+			} else {
+				*b = false
+			}
+		}
+
+	case ROLE_FOLLOWER:
+		{
+			if r.leader == "" {
+				r.leader = l.ServerName
+				r.currentTerm = l.Term
+				r.timeout.Reset(TIMEOUT)
+
+				*b = true
+			} else {
+				*b = false
+			}
+		}
+	default:
+		*b = false
 	}
 
 	return nil
 }
 
-func (r *RAFT) Heartbeats(h *HeartInfo, b *bool) error {
+func (r *RAFT) Heartbeats(h *LeaderInfo, b *bool) error {
+
+	switch r.role {
+	case ROLE_FOLLOWER:
+		{
+			if h.ServerName == r.leader {
+				*b = true
+				r.timeout.Reset(TIMEOUT)
+				fmt.Println("Get Heartbeats from Leader :", h.ServerName)
+			} else {
+				*b = false
+			}
+
+		}
+	default:
+		*b = false
+	}
+
 	return nil
 }
 
@@ -95,7 +162,7 @@ func ServerStart(port string) {
 
 	server := rpc.NewServer()
 
-	err := server.Register(raft)
+	err := server.Register(&raft)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -116,31 +183,27 @@ func ServerStart(port string) {
 }
 
 func TimeOut(tm *time.Timer) {
-	for {
-		_, b := <-tm.C
-		if b == false {
-			fmt.Println(time.Now(), " TimeOut Timer Close.")
-			break
-		}
 
-		raft.leader = ""
-
-		tm.Stop()
-
-		raft.leaderVote = time.NewTimer(250 * time.Millisecond)
-
-		go LeaderVote(raft.leaderVote)
+	_, b := <-tm.C
+	if b == false {
+		fmt.Println(time.Now(), " TimeOut Timer Close.")
+		return
 	}
+
+	raft.leader = ""
+
+	tm.Stop()
+
+	raft.leaderVote = time.NewTimer(321 * time.Millisecond)
+
+	go LeaderVote(raft.leaderVote)
 
 	fmt.Println(time.Now(), " TimeOut timer close ")
 }
 
 func KeepAlive(tm *time.Timer) {
 
-	var totalnum int
 	var agreenum int
-
-	totalnum = len(raft.othername)
 
 	for {
 		_, b := <-tm.C
@@ -163,12 +226,12 @@ func KeepAlive(tm *time.Timer) {
 			var request LeaderInfo
 			var response bool
 
-			request.servername = raft.name
-			request.term = raft.currentTerm
+			request.ServerName = raft.name
+			request.Term = raft.currentTerm
 
 			err = client.Call("RAFT.Heartbeats", &request, &response)
 			if err != nil {
-				fmt.Println(time.Now(), " LeaderVote ", err.Error())
+				fmt.Println(time.Now(), " KeepAlive ", err.Error())
 				continue
 			}
 
@@ -179,7 +242,7 @@ func KeepAlive(tm *time.Timer) {
 
 			err = client.Call("RAFT.AppendEntries", &request, &response)
 			if err != nil {
-				fmt.Println(time.Now(), " LeaderVote ", err.Error())
+				fmt.Println(time.Now(), " KeepAlive ", err.Error())
 				continue
 			}
 		}
@@ -188,10 +251,14 @@ func KeepAlive(tm *time.Timer) {
 			// 孤岛
 			tm.Stop()
 
-			raft.leaderVote = time.NewTimer(300 * time.Millisecond)
-			go LeaderVote(raft.leaderVote)
+			raft.leader = ""
+			raft.role = ROLE_FOLLOWER
+			raft.timeout = time.NewTimer(TIMEOUT)
+			go TimeOut(raft.timeout)
 
 			break
+		} else {
+			tm.Reset(KEEPALIVE)
 		}
 	}
 
@@ -215,7 +282,7 @@ func LeaderVote(tm *time.Timer) {
 		raft.currentTerm++
 
 		agreenum = 0
-		for i, v := range raft.othername {
+		for _, v := range raft.othername {
 
 			client, err := rpc.DialHTTP("tcp", v)
 			if err != nil {
@@ -228,8 +295,8 @@ func LeaderVote(tm *time.Timer) {
 			var request LeaderInfo
 			var response bool
 
-			request.servername = raft.name
-			request.term = raft.currentTerm
+			request.ServerName = raft.name
+			request.Term = raft.currentTerm
 
 			err = client.Call("RAFT.RequestVote", &request, &response)
 			if err != nil {
@@ -246,7 +313,7 @@ func LeaderVote(tm *time.Timer) {
 
 		if agreenum*2 >= totalnum {
 
-			raft.leader = ""
+			raft.leader = raft.name
 			raft.role = ROLE_LEADER
 
 			fmt.Println(time.Now(), " LeaderVote success! ")
@@ -279,13 +346,21 @@ func main() {
 
 	raft.name = args[1]
 	raft.role = ROLE_FOLLOWER
+	raft.leader = ""
 
-	raft.leader = nil
-	raft.leaderVote = time.NewTimer(time.Duration(100 * time.Millisecond))
+	index := strings.Index(raft.name, ":")
+	if index == -1 {
+		fmt.Println("Input addr invailed!")
+		return
+	}
 
+	raft.port = raft.name[index+1:]
 	raft.currentTerm = 0
 
-	go ServerStart()
+	fmt.Println(raft)
 
-	go LeaderVote(raft.leaderVote)
+	raft.timeout = time.NewTimer(TIMEOUT)
+	go TimeOut(raft.timeout)
+
+	ServerStart(raft.port)
 }
