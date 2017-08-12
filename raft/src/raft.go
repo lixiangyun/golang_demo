@@ -40,6 +40,10 @@ type RAFT struct {
 
 	timeout *time.Timer
 	mlock   *sync.Mutex
+
+	lis net.Listener
+
+	wait *sync.WaitGroup
 }
 
 func getDymicTimeOut() time.Duration {
@@ -181,14 +185,16 @@ func TimeOut(r *RAFT) {
 
 	log.Println("Timer Start ")
 
+	defer r.wait.Done()
+	defer log.Println("Timer Close.")
+
 	for {
 		_, b := <-r.timeout.C
 		if b == false {
-			log.Println("Timer Close.")
 			return
 		}
 
-		log.Printf("Name : %s , Role: %s , Term %d , Leader %s \r\n", r.name, r.role, r.currentTerm, r.leader)
+		log.Printf("Now Self : %s , Role: %s , Term %d , Leader %s \r\n", r.name, r.role, r.currentTerm, r.leader)
 
 		switch r.role {
 		case ROLE_LEADER:
@@ -210,11 +216,11 @@ func TimeOut(r *RAFT) {
 				LeaderVote(r)
 			}
 		default:
-			log.Println("unknow role", r.role)
+			log.Println("Recv Stop Raft")
+			return
 		}
 	}
 
-	log.Println("Timer Close.")
 }
 
 func KeepAlive(r *RAFT) {
@@ -388,12 +394,14 @@ func NewRaft(selfaddr string, otheraddr []string) (*RAFT, error) {
 	r.role = ROLE_FOLLOWER
 	r.votecnt = 0
 
+	r.wait = new(sync.WaitGroup)
+
 	r.mlock = new(sync.Mutex)
 
 	return r, nil
 }
 
-func Start(r *RAFT) {
+func Start(r *RAFT) error {
 
 	log.Println("Server Start")
 
@@ -402,7 +410,7 @@ func Start(r *RAFT) {
 	err := server.Register(r)
 	if err != nil {
 		log.Println(err.Error())
-		return
+		return err
 	}
 
 	server.HandleHTTP(rpc.DefaultRPCPath, rpc.DefaultDebugPath)
@@ -410,21 +418,40 @@ func Start(r *RAFT) {
 	listen, err := net.Listen("tcp", ":"+r.port)
 	if err != nil {
 		log.Println(err.Error())
-		return
+		return err
 	}
+
+	r.lis = listen
+
+	r.wait.Add(2)
 
 	r.timeout = time.NewTimer(getDymicTimeOut())
 	go TimeOut(r)
 
-	err = http.Serve(listen, nil)
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
+	go func() {
 
-	log.Println("Server End")
+		defer r.wait.Done()
+
+		err = http.Serve(listen, nil)
+
+		log.Println("Server End")
+
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+	}()
+
+	return nil
 }
 
 func Stop(r *RAFT) {
 
+	r.mlock.Lock()
+	r.role = ""
+	r.lis.Close()
+	r.timeout.Reset(0)
+	r.mlock.Unlock()
+
+	r.wait.Wait()
 }
