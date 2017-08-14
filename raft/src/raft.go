@@ -19,8 +19,10 @@ const (
 )
 
 const (
-	TIMEOUT   = 3 * time.Second
-	KEEPALIVE = 1 * time.Second
+	RPC_TIMEOUT  = 500 * time.Millisecond
+	VOTE_TIMEOUT = 3 * time.Second
+	KEEP_ALIVE   = 1 * time.Second
+	PING_TIMEOUT = 2 * time.Second
 )
 
 type LeaderInfo struct {
@@ -36,8 +38,11 @@ type RAFT struct {
 	leader    string
 	votecnt   int
 
+	client map[string]*rpc.Client
+
 	currentTerm uint64
 
+	ping    *time.Timer
 	timeout *time.Timer
 	mlock   *sync.Mutex
 
@@ -62,7 +67,7 @@ func getDymicTimeOut() time.Duration {
 
 	log.Println("val : ", val)
 
-	return TIMEOUT + time.Duration(val)*time.Millisecond
+	return VOTE_TIMEOUT + time.Duration(val)*time.Millisecond
 }
 
 func (r *RAFT) RequestVote(l *LeaderInfo, b *bool) error {
@@ -181,12 +186,38 @@ func (r *RAFT) Heartbeats(l *LeaderInfo, b *bool) error {
 	return nil
 }
 
+func Ping(r *RAFT) {
+	log.Println("Ping Start")
+
+	defer r.wait.Done()
+	defer log.Println("Ping Close")
+
+	for {
+		_, b := <-r.ping.C
+		if b == false {
+			return
+		}
+
+		for _, name := range r.othername {
+			_, b := r.client[name]
+			if b == false {
+				client, err := rpc.DialHTTP("tcp", name)
+				if err != nil {
+					log.Println("Ping ", err.Error())
+					continue
+				}
+				r.client[name] = client
+			}
+		}
+	}
+}
+
 func TimeOut(r *RAFT) {
 
 	log.Println("Timer Start ")
 
 	defer r.wait.Done()
-	defer log.Println("Timer Close.")
+	defer log.Println("Timer Close")
 
 	for {
 		_, b := <-r.timeout.C
@@ -220,41 +251,68 @@ func TimeOut(r *RAFT) {
 			return
 		}
 	}
+}
 
+func keepalive(r *RAFT, name string, cli *rpc.Client, tm time.Duration, b chan bool) {
+	rpctm := time.NewTimer(RPC_TIMEOUT)
+
+	request := new(LeaderInfo)
+	response := new(bool)
+
+	request.ServerName = r.name
+	request.Term = r.currentTerm
+
+	result := cli.Go("RAFT.Heartbeats", request, response, nil)
+
+	select {
+	case rsp := <-result.Done:
+		{
+			if rsp.Error != nil {
+				cli.Close()
+				r.client[]
+			}
+		}
+	case <-rpctm:
+		{
+
+		}
+	}
 }
 
 func KeepAlive(r *RAFT) {
 
 	log.Println("KeepAlive timer start ")
 
-	agreenum := 0
-	for _, v := range r.othername {
+	length := len(r.othername)
+	queue := make(chan *rpc.Call, length)
 
-		client, err := rpc.DialHTTP("tcp", v)
-		if err != nil {
-			log.Println("KeepAlive ", err.Error())
+	for _, cli := range r.client {
+		if cli == nil {
 			continue
 		}
 
-		defer client.Close()
-
-		var request LeaderInfo
-		var response bool
-
-		request.ServerName = r.name
-		request.Term = r.currentTerm
-
-		err = client.Call("RAFT.Heartbeats", &request, &response)
-		if err != nil {
-			log.Println("KeepAlive ", err.Error())
-			continue
-		}
-
-		if response == true {
-			agreenum++
-			continue
-		}
 	}
+
+	agreenum := 0
+
+	for i := 0; i < length; i++ {
+
+		select {
+		case result := <-queue:
+			{
+
+			}
+		case <-rpctm:
+			{
+
+			}
+		}
+
+		result := <-queue
+
+	}
+
+	close(queue)
 
 	if agreenum == 0 {
 		r.mlock.Lock()
@@ -267,7 +325,7 @@ func KeepAlive(r *RAFT) {
 	} else {
 
 		r.mlock.Lock()
-		r.timeout.Reset(KEEPALIVE)
+		r.timeout.Reset(KEEP_ALIVE)
 		r.mlock.Unlock()
 	}
 }
@@ -313,8 +371,6 @@ func LeaderVote(r *RAFT) {
 		request.ServerName = r.name
 		request.Term = r.currentTerm
 
-		//err = client.Go()
-
 		err = cli.Call("RAFT.RequestVote", &request, &response)
 		if err != nil {
 			log.Println("LeaderVote ", err.Error())
@@ -330,8 +386,6 @@ func LeaderVote(r *RAFT) {
 
 		request.ServerName = r.name
 		request.Term = r.currentTerm
-
-		//err = client.Go()
 
 		err = cli.Call("RAFT.AppendEntries", &request, &response)
 		if err != nil {
@@ -351,7 +405,7 @@ func LeaderVote(r *RAFT) {
 		r.mlock.Lock()
 
 		r.role = ROLE_LEADER
-		r.timeout.Reset(KEEPALIVE)
+		r.timeout.Reset(KEEP_ALIVE)
 
 		r.mlock.Unlock()
 
@@ -423,7 +477,10 @@ func Start(r *RAFT) error {
 
 	r.lis = listen
 
-	r.wait.Add(2)
+	r.wait.Add(3)
+
+	r.ping = time.NewTimer(PING_TIMEOUT)
+	go Ping(r)
 
 	r.timeout = time.NewTimer(getDymicTimeOut())
 	go TimeOut(r)
