@@ -7,6 +7,18 @@ import (
 	"strings"
 )
 
+type MyMux struct {
+}
+
+func (p *MyMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/" {
+		sayHelloName(w, r)
+		return
+	}
+	http.NotFound(w, r)
+	return
+}
+
 func sayHelloName(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 
@@ -26,8 +38,9 @@ func sayHelloName(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	mux := &MyMux{}
 	http.HandleFunc("/", sayHelloName)
-	err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8080", mux)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
