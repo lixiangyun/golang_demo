@@ -27,13 +27,32 @@ func login(w http.ResponseWriter, r *http.Request) {
 		t, _ := template.ParseFiles("login.gtpl")
 		t.Execute(w, nil)
 	} else {
+		r.ParseForm()
+
+		v := r.Form
+		v.Set("name", "Ava")
+		v.Add("friend", "Jess")
+		v.Add("friend", "Sarah")
+		v.Add("friend", "Zoe")
+
+		fmt.Println(v.Get("name"))
+		fmt.Println(v.Get("friend"))
+		fmt.Println(v["friend"])
+
 		//请求的是登陆数据，那么执行登陆的逻辑判断
 		fmt.Println("username:", r.Form["username"])
 		fmt.Println("password:", r.Form["password"])
+
+		// printf all k/v
+		for k, v := range r.Form {
+			fmt.Println("key:", k)
+			fmt.Println("val:", strings.Join(v, ""))
+		}
+
 	}
 }
 func main() {
-	http.HandleFunc("/", sayhelloName)       //设置访问的路由
+	http.HandleFunc("/home", sayhelloName)   //设置访问的路由
 	http.HandleFunc("/login", login)         //设置访问的路由
 	err := http.ListenAndServe(":9090", nil) //设置监听的端口
 	if err != nil {
