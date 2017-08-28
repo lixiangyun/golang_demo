@@ -1,11 +1,15 @@
 package main
 
 import (
+	"crypto/md5"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func sayhelloName(w http.ResponseWriter, r *http.Request) {
@@ -21,36 +25,33 @@ func sayhelloName(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Fprintf(w, "Hello astaxie!") //这个写入到w的是输出到客户端的
 }
+
 func login(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("method:", r.Method) //获取请求的方法
 	if r.Method == "GET" {
+		crutime := time.Now().Unix()
+		h := md5.New()
+		io.WriteString(h, strconv.FormatInt(crutime, 10))
+		token := fmt.Sprintf("%x", h.Sum(nil))
 		t, _ := template.ParseFiles("login.gtpl")
-		t.Execute(w, nil)
+		t.Execute(w, token)
+		fmt.Println("new token : ", token)
 	} else {
-		r.ParseForm()
-
-		v := r.Form
-		v.Set("name", "Ava")
-		v.Add("friend", "Jess")
-		v.Add("friend", "Sarah")
-		v.Add("friend", "Zoe")
-
-		fmt.Println(v.Get("name"))
-		fmt.Println(v.Get("friend"))
-		fmt.Println(v["friend"])
-
 		//请求的是登陆数据，那么执行登陆的逻辑判断
-		fmt.Println("username:", r.Form["username"])
-		fmt.Println("password:", r.Form["password"])
-
-		// printf all k/v
-		for k, v := range r.Form {
-			fmt.Println("key:", k)
-			fmt.Println("val:", strings.Join(v, ""))
+		r.ParseForm()
+		token := r.Form.Get("token")
+		if token != "" {
+			//验证token的合法性
+			fmt.Println("get token : ", token)
+		} else {
 		}
-
+		fmt.Println("username length:", len(r.Form["username"][0]))
+		fmt.Println("username:", template.HTMLEscapeString(r.Form.Get("username"))) //输出到服务器端
+		fmt.Println("password:", template.HTMLEscapeString(r.Form.Get("password")))
+		template.HTMLEscape(w, []byte(r.Form.Get("username"))) //输出到客户端
 	}
 }
+
 func main() {
 	http.HandleFunc("/home", sayhelloName)   //设置访问的路由
 	http.HandleFunc("/login", login)         //设置访问的路由
