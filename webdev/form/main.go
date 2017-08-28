@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -52,9 +53,42 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func upload(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("method:", r.Method) //获取请求的方法
+	if r.Method == "GET" {
+		crutime := time.Now().Unix()
+		h := md5.New()
+		io.WriteString(h, strconv.FormatInt(crutime, 10))
+		token := fmt.Sprintf("%x", h.Sum(nil))
+		t, _ := template.ParseFiles("upload.gtpl")
+		t.Execute(w, token)
+	} else {
+		r.ParseMultipartForm(32 << 20)
+		file, handler, err := r.FormFile("uploadfile")
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		defer file.Close()
+
+		f, err := os.OpenFile("./uploaddir/"+handler.Filename, os.O_WRONLY|os.O_CREATE, 0666)
+		if err != nil {
+			template.HTMLEscape(w, []byte("upload failed!")) //输出到客户端
+			return
+		}
+		defer f.Close()
+		io.Copy(f, file)
+
+		template.HTMLEscape(w, []byte("upload success!")) //输出到客户端
+	}
+}
+
 func main() {
-	http.HandleFunc("/home", sayhelloName)   //设置访问的路由
-	http.HandleFunc("/login", login)         //设置访问的路由
+
+	http.HandleFunc("/home", sayhelloName) //设置访问的路由
+	http.HandleFunc("/login", login)       //设置访问的路由
+	http.HandleFunc("/upload", upload)     //设置访问的路由
+
 	err := http.ListenAndServe(":9090", nil) //设置监听的端口
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
