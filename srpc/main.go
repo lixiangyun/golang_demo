@@ -11,8 +11,8 @@ type SAVE struct {
 
 func (s *SAVE) Add(a, b *int) error {
 
-	if a == nil || b == nil {
-		return errors.New("input parms error! ")
+	if *a > 100 {
+		return errors.New("input error!")
 	}
 
 	*b = (*a + 1)
@@ -28,12 +28,11 @@ func main() {
 
 	server := srpc.NewServer("localhost:1234")
 
-	server.Bind(&s)
+	server.BindMethod(&s)
 
 	var a, b int
-	a = 123
-	b = 321
-
+	a = 1
+	b = 2
 	err := server.Call("Add", &a, &b)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -48,5 +47,13 @@ func main() {
 		fmt.Println("a= ", a, " b=", b)
 	}
 
+	a = 123
+	b = 2
+	err = server.Call("Add", &a, &b)
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("a= ", a, " b=", b)
+	}
 	return
 }
