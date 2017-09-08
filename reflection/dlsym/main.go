@@ -34,6 +34,7 @@ func main() {
 	//不传入地址就只能反射Routers静态定义的方法
 	vf := reflect.ValueOf(&ruTest)
 	vft := vf.Type()
+
 	//读取方法数量
 	mNum := vf.NumMethod()
 	fmt.Println("NumMethod:", mNum)
@@ -43,6 +44,7 @@ func main() {
 		fmt.Println("index:", i, " MethodName:", mName)
 		crMap[mName] = vf.Method(i) //<<<
 	}
+
 	//演示
 	testStr := "Hello Go"
 	//创建带调用方法时需要传入的参数列表
@@ -57,4 +59,3 @@ func main() {
 	//可见，testStr的值已经被修改了
 	fmt.Println("testStr:", testStr)
 }
-
