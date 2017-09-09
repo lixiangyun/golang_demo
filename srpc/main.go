@@ -22,6 +22,19 @@ func (s *SAVE) Add(a, b *int) error {
 	return nil
 }
 
+func (s *SAVE) Sub(a, b *int) error {
+
+	if *a > 100 {
+		return errors.New("input error!")
+	}
+
+	*b = (*a - *b)
+
+	fmt.Println("call sub ", *a, *b)
+
+	return nil
+}
+
 func main() {
 
 	var s SAVE
@@ -37,14 +50,14 @@ func main() {
 	if err != nil {
 		fmt.Println(err.Error())
 	} else {
-		fmt.Println("a= ", a, " b=", b)
+		fmt.Println("a=", a, " b=", b)
 	}
 
 	err = server.Call("Add", a, &b)
 	if err != nil {
 		fmt.Println(err.Error())
 	} else {
-		fmt.Println("a= ", a, " b=", b)
+		fmt.Println("a=", a, " b=", b)
 	}
 
 	a = 123
@@ -53,7 +66,17 @@ func main() {
 	if err != nil {
 		fmt.Println(err.Error())
 	} else {
-		fmt.Println("a= ", a, " b=", b)
+		fmt.Println("a=", a, " b=", b)
 	}
+
+	a = 3
+	b = 2
+	err = server.Call("Sub", &a, &b)
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("a=", a, " b=", b)
+	}
+
 	return
 }
