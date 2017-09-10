@@ -2,7 +2,7 @@ package srpc
 
 import (
 	"bytes"
-	"encoding/binary"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"log"
@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-type requestBlock struct {
+type RequestBlock struct {
 	MsgType uint64
 	MsgId   uint64
 	Method  string
@@ -19,7 +19,7 @@ type requestBlock struct {
 	Body    []byte
 }
 
-type rsponseBlock struct {
+type RsponseBlock struct {
 	MsgType uint64
 	MsgId   uint64
 	Method  string
@@ -39,21 +39,19 @@ type Server struct {
 	symbol map[string]funcinfo
 
 	conn *net.UDPConn
-	lock *sync.Mutex
-	wait *sync.WaitGroup
+	wait sync.WaitGroup
 }
 
 // 报文序列化
 func CodePacket(req interface{}) ([]byte, error) {
 	iobuf := new(bytes.Buffer)
 
-	err := binary.Write(iobuf, binary.BigEndian, req)
+	enc := gob.NewEncoder(iobuf)
+
+	err := enc.Encode(req)
 	if err != nil {
 		return nil, err
 	}
-
-	//log.Println("REQ: ", req)
-	//log.Println("SEND_BUF: ", iobuf.Len(), iobuf.Bytes())
 
 	return iobuf.Bytes(), nil
 }
@@ -192,8 +190,8 @@ func serverProcess(s *Server) {
 			return
 		}
 
-		var reqblock requestBlock
-		var rspblock rsponseBlock
+		var reqblock RequestBlock
+		var rspblock RsponseBlock
 
 		// 反序列化客户端请求的报文
 		err = DecodePacket(buf[:n], &reqblock)
