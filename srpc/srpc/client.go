@@ -43,8 +43,8 @@ func (n *Client) Call(method string, req interface{}, rsp interface{}) error {
 	reqblock.MsgType = 0
 	reqblock.Method = method
 	reqblock.MsgId = n.MsgId
-	reqblock.Parms[0] = reflect.ValueOf(req).String()
-	reqblock.Parms[1] = reflect.ValueOf(rsp).String()
+	reqblock.Parms[0] = reflect.TypeOf(req).String()
+	reqblock.Parms[1] = reflect.TypeOf(rsp).String()
 	reqblock.Body, err = CodePacket(req)
 	if err != nil {
 		Log(err.Error())

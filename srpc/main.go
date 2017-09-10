@@ -10,18 +10,18 @@ import (
 type SAVE struct {
 }
 
-func (s *SAVE) Add(a uint32, b *uint32) error {
+func (s *SAVE) Add(a *uint32, b *uint32) error {
 
-	*b = (a + 1)
+	*b = (*a + 1)
 
 	fmt.Println("call add ", a, b)
 
 	return nil
 }
 
-func (s *SAVE) Sub(a uint32, b *uint32) error {
+func (s *SAVE) Sub(a *uint32, b *uint32) error {
 
-	*b = (a - *b)
+	*b = (*a - *b)
 
 	fmt.Println("call sub ", a, b)
 
@@ -54,7 +54,7 @@ func Client(addr string) {
 	var a, b uint32
 	a = 1
 	b = 2
-	err := client.Call("Add", a, &b)
+	err := client.Call("Add", &a, &b)
 	if err != nil {
 		fmt.Println(err.Error())
 	} else {

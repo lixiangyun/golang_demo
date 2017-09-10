@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"reflect"
+	"runtime/debug"
 	"sync"
 )
 
@@ -50,6 +51,7 @@ func CodePacket(req interface{}) ([]byte, error) {
 
 	err := enc.Encode(req)
 	if err != nil {
+		debug.PrintStack()
 		return nil, err
 	}
 
@@ -58,12 +60,13 @@ func CodePacket(req interface{}) ([]byte, error) {
 
 // 报文反序列化
 func DecodePacket(buf []byte, rsp interface{}) error {
-
 	iobuf := bytes.NewReader(buf)
-	err := binary.Read(iobuf, binary.BigEndian, rsp)
+	denc := gob.NewDecoder(iobuf)
+	err := denc.Decode(rsp)
 
-	//log.Println("RSP: ", rsp)
-	//log.Println("RECV_BUF:", len(buf), buf)
+	if err != nil {
+		debug.PrintStack()
+	}
 
 	return err
 }
@@ -132,7 +135,7 @@ func (s *Server) MatchMethod(method string, parms [2]string) ([]reflect.Type, er
 
 	for i := 0; i < 2; i++ {
 		if parms[i] != fun.input[i].String() {
-			errs := fmt.Sprintf("parm(%d) type not match : %s -> %s \r\n",
+			errs := fmt.Sprintf("MatchMethod parm(%d) type not match : %s -> %s \r\n",
 				i, parms[i], fun.input[i].String())
 			return nil, errors.New(errs)
 		}
@@ -141,23 +144,11 @@ func (s *Server) MatchMethod(method string, parms [2]string) ([]reflect.Type, er
 	return fun.input[0:], nil
 }
 
-func (s *Server) Call(method string, req interface{}, rsp interface{}) error {
+func (s *Server) Call(method string, parms []reflect.Value) error {
 
 	fun, b := s.symbol[method]
 	if b == false {
 		return errors.New("can not found " + method)
-	}
-
-	parms := make([]reflect.Value, 2)
-	parms[0] = reflect.ValueOf(req)
-	parms[1] = reflect.ValueOf(rsp)
-
-	for i := 0; i < 2; i++ {
-		if parms[i].Type() != fun.input[i] {
-			errs := fmt.Sprintf("parm type not match : %s %s \r\n",
-				parms[i].Type().String(), fun.input[i])
-			return errors.New(errs)
-		}
 	}
 
 	parms = fun.function.Call(parms)
@@ -206,16 +197,18 @@ func serverProcess(s *Server) {
 			continue
 		}
 
-		parm0 := reflect.New(parmtype[0])
-		parm1 := reflect.New(parmtype[1])
+		var parms [2]reflect.Value
 
-		err = DecodePacket(reqblock.Body, parm0)
+		parms[0] = reflect.Indirect(reflect.New(parmtype[0]))
+		parms[1] = reflect.Indirect(reflect.New(parmtype[1]))
+
+		err = DecodePacket(reqblock.Body, parms[0].Interface())
 		if err != nil {
 			log.Println(err.Error())
 			continue
 		}
 
-		err = s.Call(reqblock.Method, parm0.Interface(), parm1.Interface())
+		err = s.Call(reqblock.Method, parms[0:])
 		if err != nil {
 			log.Println(err.Error())
 			continue
@@ -226,7 +219,7 @@ func serverProcess(s *Server) {
 		rspblock.Method = reqblock.Method
 		rspblock.Result = err
 
-		rspblock.Body, err = CodePacket(parm1.Interface())
+		rspblock.Body, err = CodePacket(parms[1].Interface())
 		if err != nil {
 			log.Println(err.Error())
 			continue

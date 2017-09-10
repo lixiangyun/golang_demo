@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
-	//	"net/http"
 	"net/rpc"
 
-	"golang_demo/demo5/demo5.3/server"
+	"golang_demo/socket/rpc/server"
 )
 
 func main() {
