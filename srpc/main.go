@@ -8,22 +8,23 @@ import (
 )
 
 type SAVE struct {
+	tmp uint32
 }
 
-func (s *SAVE) Add(a *uint32, b *uint32) error {
+func (s *SAVE) Add(a uint32, b *uint32) error {
 
-	*b = (*a + 1)
+	*b = a + 1
 
-	fmt.Println("call add ", a, b)
+	fmt.Println("call add ", a, *b, s.tmp)
 
 	return nil
 }
 
-func (s *SAVE) Sub(a *uint32, b *uint32) error {
+func (s *SAVE) Sub(a uint32, b *uint32) error {
 
-	*b = (*a - *b)
+	*b = a - 1
 
-	fmt.Println("call sub ", a, b)
+	fmt.Println("call sub ", a, *b, s.tmp)
 
 	return nil
 }
@@ -31,6 +32,9 @@ func (s *SAVE) Sub(a *uint32, b *uint32) error {
 func Server(addr string) {
 
 	var s SAVE
+
+	s.tmp = 100
+
 	server := srpc.NewServer(":1234")
 	server.BindMethod(&s)
 
@@ -53,8 +57,15 @@ func Client(addr string) {
 
 	var a, b uint32
 	a = 1
-	b = 2
-	err := client.Call("Add", &a, &b)
+	err := client.Call("Add", a, &b)
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println("a=", a, " b=", b)
+	}
+
+	a = 2
+	err = client.Call("Sub", a, &b)
 	if err != nil {
 		fmt.Println(err.Error())
 	} else {

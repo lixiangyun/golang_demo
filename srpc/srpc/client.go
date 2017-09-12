@@ -27,13 +27,21 @@ func NewClient(addr string) *Client {
 
 func (n *Client) Call(method string, req interface{}, rsp interface{}) error {
 
-	// 创建udp协议的socket服务
-	socket, err := net.Dial("udp", n.Addr)
-	if err != nil {
-		return err
+	var err error
+
+	requestValue := reflect.ValueOf(req)
+	rsponseValue := reflect.ValueOf(rsp)
+
+	// 校验参数合法性，req必须是非指针类型，rsp必须是指针类型
+	if rsponseValue.Kind() != reflect.Ptr {
+		return errors.New("parm rsp is'nt ptr type!")
 	}
 
-	defer socket.Close()
+	if requestValue.Kind() == reflect.Ptr {
+		return errors.New("parm req is ptr type!")
+	}
+
+	rsponseValue = reflect.Indirect(rsponseValue)
 
 	n.MsgId++
 
@@ -43,20 +51,30 @@ func (n *Client) Call(method string, req interface{}, rsp interface{}) error {
 	reqblock.MsgType = 0
 	reqblock.Method = method
 	reqblock.MsgId = n.MsgId
-	reqblock.Parms[0] = reflect.TypeOf(req).String()
-	reqblock.Parms[1] = reflect.TypeOf(rsp).String()
+	reqblock.Parms[0] = requestValue.Type().String()
+	reqblock.Parms[1] = rsponseValue.Type().String()
 	reqblock.Body, err = CodePacket(req)
 	if err != nil {
 		Log(err.Error())
 		return err
 	}
 
+	// 创建udp协议的socket服务
+	socket, err := net.Dial("udp", n.Addr)
+	if err != nil {
+		return err
+	}
+
+	defer socket.Close()
+
 	// 设置 read/write 超时时间
-	err = socket.SetDeadline(time.Now().Add(1 * time.Second))
+	err = socket.SetDeadline(time.Now().Add(2 * time.Second))
 	if err != nil {
 		Log(err.Error())
 		return err
 	}
+
+	log.Println(reqblock)
 
 	// 序列化请求报文
 	newbuf, err := CodePacket(reqblock)
@@ -82,11 +100,13 @@ func (n *Client) Call(method string, req interface{}, rsp interface{}) error {
 	}
 
 	// 反序列化报文
-	err = DecodePacket(buf[0:cnt], rspblock)
+	err = DecodePacket(buf[0:cnt], &rspblock)
 	if err != nil {
 		Log(err.Error())
 		return err
 	}
+
+	log.Println(rspblock)
 
 	// 校验请求的序号是否一致
 	if rspblock.MsgId != reqblock.MsgId {

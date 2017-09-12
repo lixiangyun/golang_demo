@@ -24,7 +24,7 @@ type RsponseBlock struct {
 	MsgType uint64
 	MsgId   uint64
 	Method  string
-	Result  error
+	Result  string
 	Body    []byte
 }
 
@@ -116,6 +116,20 @@ func (s *Server) BindMethod(pthis interface{}) {
 
 		fun.input[0] = fun.functype.In(0)
 		fun.input[1] = fun.functype.In(1)
+
+		// 校验参数合法性，req必须是非指针类型，rsp必须是指针类型
+		if fun.input[0].Kind() == reflect.Ptr {
+			fmt.Println("parm 1 must ptr type!")
+			continue
+		}
+
+		if fun.input[1].Kind() != reflect.Ptr {
+			fmt.Println("parm 2 must ptr type!")
+			continue
+		}
+
+		fun.input[1] = fun.input[1].Elem()
+
 		fun.output = fun.functype.Out(0)
 
 		if fun.output.String() != "error" {
@@ -125,7 +139,8 @@ func (s *Server) BindMethod(pthis interface{}) {
 
 		s.symbol[funname] = fun
 
-		fmt.Printf("Add Method: %s \r\n", funname)
+		fmt.Println("Add Method: ", funname,
+			fun.input[0].String(), fun.input[1].String(), fun.output.String())
 	}
 }
 
@@ -167,7 +182,7 @@ func (s *Server) Call(method string, parms []reflect.Value) error {
 		}
 	}
 
-	return nil
+	return errors.New("success")
 }
 
 // 消息收发的处理协成
@@ -194,6 +209,8 @@ func serverProcess(s *Server) {
 			continue
 		}
 
+		log.Println("Request: ", reqblock)
+
 		parmtype, err := s.MatchMethod(reqblock.Method, reqblock.Parms)
 		if err != nil {
 			log.Println(err.Error())
@@ -202,8 +219,8 @@ func serverProcess(s *Server) {
 
 		var parms [2]reflect.Value
 
-		parms[0] = reflect.Indirect(reflect.New(parmtype[0]))
-		parms[1] = reflect.Indirect(reflect.New(parmtype[1]))
+		parms[0] = reflect.New(parmtype[0])
+		parms[1] = reflect.New(parmtype[1])
 
 		err = DecodePacket(reqblock.Body, parms[0].Interface())
 		if err != nil {
@@ -211,22 +228,28 @@ func serverProcess(s *Server) {
 			continue
 		}
 
-		err = s.Call(reqblock.Method, parms[0:])
+		var input [2]reflect.Value
+
+		input[0] = reflect.Indirect(parms[0])
+		input[1] = parms[1]
+
+		err = s.Call(reqblock.Method, input[0:])
 		if err != nil {
 			log.Println(err.Error())
-			continue
 		}
 
 		rspblock.MsgType = reqblock.MsgType
 		rspblock.MsgId = reqblock.MsgId
 		rspblock.Method = reqblock.Method
-		rspblock.Result = err
+		rspblock.Result = err.Error()
 
-		rspblock.Body, err = CodePacket(parms[1].Interface())
+		rspblock.Body, err = CodePacket(reflect.Indirect(parms[1]).Interface())
 		if err != nil {
 			log.Println(err.Error())
 			continue
 		}
+
+		log.Println("Rsponse : ", rspblock)
 
 		rspBuf, err := CodePacket(rspblock)
 		if err != nil {
@@ -234,13 +257,15 @@ func serverProcess(s *Server) {
 			continue
 		}
 
+		log.Println("sendbuf : ", rspBuf)
+		log.Println("addr : ", addr)
+
 		// 将序列化后的报文发送到客户端
 		_, err = s.conn.WriteToUDP(rspBuf, addr)
 		if err != nil {
 			log.Println(err.Error())
 			continue
 		}
-
 	}
 }
 
