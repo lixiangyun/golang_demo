@@ -8,12 +8,14 @@ import (
 	"runtime/debug"
 )
 
+// 函数反射（包括参数类型）
 type funcinfo struct {
 	funvalue reflect.Value
 	input    []reflect.Type
 	output   []reflect.Type
 }
 
+// 符号表
 var funtable map[string]*funcinfo
 
 // 报文序列化
@@ -93,6 +95,7 @@ func AddMethod(pthis interface{}) {
 type SAVE struct {
 }
 
+// 构造验证的方法
 func (s *SAVE) Add(a uint32, b uint32) uint32 {
 
 	c := (a + b)
@@ -111,6 +114,7 @@ func (s *SAVE) Sub(a uint32, b uint32) uint32 {
 	return c
 }
 
+// 本地符号调用方法
 func CallMethod(funname string, input []interface{}, output []interface{}) {
 
 	funinfo, b := funtable[funname]
@@ -164,6 +168,7 @@ func CallMethod(funname string, input []interface{}, output []interface{}) {
 	return
 }
 
+
 func main() {
 
 	funtable = make(map[string]*funcinfo)
@@ -171,6 +176,7 @@ func main() {
 	var temp SAVE
 	AddMethod(&temp)
 
+	// 测试用例
 	input := make([]interface{}, 2)
 	output := make([]interface{}, 1)
 
@@ -179,6 +185,7 @@ func main() {
 	a = 3
 	b = 2
 
+	// 测试Add方法
 	input[0] = a
 	input[1] = b
 	output[0] = &c
@@ -188,6 +195,7 @@ func main() {
 	a = 10
 	b = 4
 
+	// 测试sub方法
 	input[0] = a
 	input[1] = b
 	output[0] = &c
