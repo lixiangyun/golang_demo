@@ -93,6 +93,7 @@ func AddMethod(pthis interface{}) {
 }
 
 type SAVE struct {
+	Abc uint32
 }
 
 // 构造验证的方法
@@ -100,7 +101,7 @@ func (s *SAVE) Add(a uint32, b uint32) uint32 {
 
 	c := (a + b)
 
-	fmt.Println("call sub ", a, b, c)
+	fmt.Println("call Add ", a, b, c, s.Abc)
 
 	return c
 }
@@ -109,7 +110,7 @@ func (s *SAVE) Sub(a uint32, b uint32) uint32 {
 
 	c := (a - b)
 
-	fmt.Println("call sub ", a, b, c)
+	fmt.Println("call sub ", a, b, c, s.Abc)
 
 	return c
 }
@@ -168,7 +169,6 @@ func CallMethod(funname string, input []interface{}, output []interface{}) {
 	return
 }
 
-
 func main() {
 
 	funtable = make(map[string]*funcinfo)
@@ -185,6 +185,8 @@ func main() {
 	a = 3
 	b = 2
 
+	temp.Abc = 1000
+
 	// 测试Add方法
 	input[0] = a
 	input[1] = b
@@ -194,6 +196,8 @@ func main() {
 
 	a = 10
 	b = 4
+
+	temp.Abc = 2000
 
 	// 测试sub方法
 	input[0] = a

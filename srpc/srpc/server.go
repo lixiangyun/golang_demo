@@ -38,6 +38,7 @@ type funcinfo struct {
 type Server struct {
 	Addr   string
 	symbol map[string]funcinfo
+	pthis  reflect.Value
 
 	conn *net.UDPConn
 	wait sync.WaitGroup
@@ -87,6 +88,8 @@ func (s *Server) BindMethod(pthis interface{}) {
 	//不传入地址就只能反射Routers静态定义的方法
 	vfun := reflect.ValueOf(pthis)
 	vtype := vfun.Type()
+
+	s.pthis = vfun
 
 	//读取方法数量
 	num := vfun.NumMethod()
