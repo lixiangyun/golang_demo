@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	IP   = "192.168.0.107"
+	IP   = "localhost"
 	PORT = "6060"
 )
 
@@ -25,7 +25,11 @@ type banchmark struct {
 	recvmsgsize int
 }
 
-var banchmarktest [15]banchmark
+const (
+	MAX_BUF_SIZE = 1024 * 1024
+)
+
+var banchmarktest [20]banchmark
 
 func netstat_client() {
 
@@ -64,7 +68,7 @@ func netstat_client() {
 		lastsendmsgcnt = sendmsgcnt
 		lastsendmsgsize = sendmsgsize
 
-		if sendbuflen*2 < 65535 {
+		if sendbuflen*2 <= MAX_BUF_SIZE {
 			sendbuflen = sendbuflen * 2
 		}
 
@@ -111,7 +115,7 @@ func netstat_server() {
 
 func msgProc(conn net.Conn) {
 
-	var buf [65535]byte
+	var buf [MAX_BUF_SIZE]byte
 
 	defer conn.Close()
 
@@ -161,7 +165,7 @@ var sendbuflen = 128
 func ClientSend(conn net.Conn, wait *sync.WaitGroup) {
 
 	defer wait.Done()
-	var buf [65535]byte
+	var buf [MAX_BUF_SIZE]byte
 
 	for {
 
@@ -179,7 +183,7 @@ func ClientSend(conn net.Conn, wait *sync.WaitGroup) {
 func ClientRecv(conn net.Conn, wait *sync.WaitGroup) {
 
 	defer wait.Done()
-	var buf [65535]byte
+	var buf [MAX_BUF_SIZE]byte
 
 	for {
 		cnt, err := conn.Read(buf[0:])
