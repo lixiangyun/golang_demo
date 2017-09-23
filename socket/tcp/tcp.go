@@ -1,36 +1,49 @@
 package main
 
 import (
-	"fmt"
-	"io"
+	"log"
 	"net"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 )
 
 const (
-	IP   = "192.168.0.107"
+	IP   = "localhost"
 	PORT = "6060"
 )
 
 var recvmsgcnt int
 var recvmsgsize int
 
+var sendmsgcnt int
+var sendmsgsize int
+
 func netstat() {
 
 	lastrecvmsgcnt := recvmsgcnt
 	lastrecvmsgsize := recvmsgsize
 
-	for {
-		time.Sleep(time.Duration(1 * time.Second))
+	lastsendmsgcnt := sendmsgcnt
+	lastsendmsgsize := sendmsgsize
 
-		fmt.Printf("Speed %d cnt/s , %.3f MB/s\r\b",
+	for {
+		time.Sleep(time.Second)
+
+		log.Printf("Recv %d cnt/s , %.3f MB/s \r\n",
 			recvmsgcnt-lastrecvmsgcnt,
 			float32(recvmsgsize-lastrecvmsgsize)/(1024*1024))
 
+		log.Printf("Send %d cnt/s , %.3f MB/s \r\n",
+			sendmsgcnt-lastsendmsgcnt,
+			float32(sendmsgsize-lastsendmsgsize)/(1024*1024))
+
 		lastrecvmsgcnt = recvmsgcnt
 		lastrecvmsgsize = recvmsgsize
+
+		lastsendmsgcnt = sendmsgcnt
+		lastsendmsgsize = sendmsgsize
 	}
 }
 
@@ -43,23 +56,29 @@ func msgProc(conn net.Conn) {
 	for {
 		n, err := conn.Read(buf[0:])
 		if err != nil {
-			if err == io.EOF {
-				fmt.Println("close connect! ", conn.RemoteAddr())
-				return
-			}
+			log.Println(err.Error())
+			return
 		}
 
 		recvmsgcnt++
 		recvmsgsize += n
-	}
 
+		n, err = conn.Write(buf[0:])
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		sendmsgcnt++
+		sendmsgsize += n
+	}
 }
 
 func Server() {
 
 	listen, err := net.Listen("tcp", ":"+PORT)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return
 	}
 
@@ -68,31 +87,70 @@ func Server() {
 	for {
 		conn, err2 := listen.Accept()
 		if err2 != nil {
-			fmt.Println(err.Error())
+			log.Println(err.Error())
 			continue
 		}
 		go msgProc(conn)
 	}
 }
 
+func ClientSend(conn net.Conn, wait *sync.WaitGroup) {
+
+	defer wait.Done()
+	var buf [4096]byte
+
+	for {
+		cnt, err := conn.Write(buf[0:])
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		sendmsgcnt++
+		sendmsgsize += cnt
+	}
+}
+
+func ClientRecv(conn net.Conn, wait *sync.WaitGroup) {
+
+	defer wait.Done()
+	var buf [4096]byte
+
+	for {
+		cnt, err := conn.Read(buf[0:])
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		recvmsgcnt++
+		recvmsgsize += cnt
+	}
+}
+
 func Client() {
+
+	var wait sync.WaitGroup
+
 	conn, err := net.Dial("tcp", IP+":"+PORT)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return
 	}
 
-	defer conn.Close()
+	wait.Add(2)
 
-	var buf [1024 * 63]byte
+	go ClientSend(conn, &wait)
+	go ClientRecv(conn, &wait)
+	go netstat()
 
-	for {
-		_, err2 := conn.Write(buf[0:])
-		if err2 != nil {
-			fmt.Println(err.Error())
-			return
-		}
+	for i := 0; i < 100; i++ {
+		time.Sleep(time.Second)
 	}
+
+	conn.Close()
+
+	wait.Wait()
 }
 
 func main() {
@@ -102,7 +160,7 @@ func main() {
 	args := os.Args
 
 	if len(args) < 2 {
-		fmt.Println("Usage: <-s/-c>")
+		log.Println("Usage: <-s/-c>")
 	}
 
 	switch args[1] {
