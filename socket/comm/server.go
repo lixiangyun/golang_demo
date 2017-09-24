@@ -28,10 +28,10 @@ const (
 )
 
 type msgHeader struct {
-	magicid   uint32
-	channel   uint32
-	requestid uint32
-	bodysize  uint32
+	MagicId   uint32
+	Channel   uint32
+	RequestId uint32
+	BodySize  uint32
 }
 
 var banchmarktest [20]banchmark
@@ -62,9 +62,6 @@ func netstat_client() {
 			sendmsgcnt-lastsendmsgcnt,
 			float32(sendmsgsize-lastsendmsgsize)/(1024*1024))
 
-		banchmarktest[num].sendbuflen = sendbuflen
-		banchmarktest[num].recvmsgsize = recvmsgsize - lastrecvmsgsize
-
 		num++
 
 		lastrecvmsgcnt = recvmsgcnt
@@ -72,10 +69,6 @@ func netstat_client() {
 
 		lastsendmsgcnt = sendmsgcnt
 		lastsendmsgsize = sendmsgsize
-
-		if sendbuflen*2 <= MAX_BUF_SIZE {
-			sendbuflen = sendbuflen * 2
-		}
 
 		if num >= len(banchmarktest) {
 			log.Println("banch mark test end.")
@@ -118,23 +111,47 @@ func netstat_server() {
 	}
 }
 
-type Handler interface {
-	ChanHandler(uint32, []byte)
+func FullyWrite(conn net.Conn, buf []byte) error {
+
+	totallen := len(buf)
+	sendcnt := 0
+
+	for {
+
+		cnt, err := conn.Write(buf[sendcnt:])
+		if err != nil {
+			return err
+		}
+
+		if cnt <= 0 {
+			return errors.New("conn write error!")
+		}
+
+		if cnt+sendcnt >= totallen {
+			return nil
+		}
+
+		sendcnt += cnt
+	}
 }
 
 type Server struct {
-	addr    string
-	handler map[uint32]Handler
-	listen  net.Listener
-	lock    sync.RWMutex
-	wait    sync.WaitGroup
+	addr      string
+	requestid uint32
+	sendbuf   chan []byte
+	handler   map[uint32]func(uint32, []byte)
+	listen    net.Listener
+	lock      sync.RWMutex
+	wait      sync.WaitGroup
 }
 
 func NewServer(addr string) *Server {
 
 	s := Server{addr: addr}
 
-	s.handler = make(map[uint32]Handler, 100)
+	s.sendbuf = make(chan []byte, 1000)
+
+	s.handler = make(map[uint32]func(uint32, []byte), 100)
 
 	return &s
 }
@@ -161,6 +178,7 @@ func (s *Server) Start() error {
 
 			s.wait.Add(1)
 			go msgrecvtask(conn, s)
+			go msgsendtask(conn, s.sendbuf, s)
 		}
 	}()
 
@@ -179,7 +197,7 @@ func (s *Server) Stop() error {
 	return nil
 }
 
-func gethandler(s *Server, channel uint32) Handler {
+func gethandler(s *Server, channel uint32) func(uint32, []byte) {
 	s.lock.RLock()
 	fun, b := s.handler[channel]
 	s.lock.RUnlock()
@@ -204,19 +222,59 @@ func codeMsgHeader(req msgHeader) ([]byte, error) {
 
 func decodeMsgHeader(buf []byte) (rsp msgHeader, err error) {
 
+	//log.Println("buf : ", buf)
+
 	iobuf := bytes.NewReader(buf)
 	err = binary.Read(iobuf, binary.BigEndian, &rsp)
 
 	return
 }
 
+func msgsendtask(conn net.Conn, sendbuf chan []byte, s *Server) {
+
+	defer s.wait.Done()
+	var buf [MAX_BUF_SIZE]byte
+
+	for {
+
+		buflen := 0
+
+		tmpbuf := <-sendbuf
+		tmpbuflen := len(tmpbuf)
+
+		copy(buf[buflen:buflen+tmpbuflen], tmpbuf[0:])
+		buflen += tmpbuflen
+
+		chanlen := len(sendbuf)
+
+		for i := 0; i < chanlen; i++ {
+
+			tmpbuf = <-sendbuf
+			tmpbuflen = len(tmpbuf)
+
+			copy(buf[buflen:buflen+tmpbuflen], tmpbuf[0:])
+			buflen += tmpbuflen
+
+			if buflen > MAX_BUF_SIZE/2 {
+				break
+			}
+		}
+
+		if buflen > 0 {
+			err := FullyWrite(conn, buf[0:buflen])
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
+		}
+	}
+}
+
 func msgrecvtask(conn net.Conn, s *Server) {
 
 	var buf [MAX_BUF_SIZE]byte
-	var lastindex uint32
-	var totallen uint32
-	var nextsize uint32
-	var msghead msgHeader
+	var lastindex int
+	var totallen int
 
 	defer conn.Close()
 
@@ -228,9 +286,19 @@ func msgrecvtask(conn net.Conn, s *Server) {
 			return
 		}
 
-		totallen = lastindex + uint32(recvnum)
+		//log.Println("lastindex:", lastindex)
+		//log.Println("recvnum:", recvnum)
+		//log.Println("body:", buf[lastindex:lastindex+recvnum])
+
+		totallen = lastindex + recvnum
 
 		for {
+
+			if lastindex+MSG_HEAD_LEN > totallen {
+				copy(buf[0:totallen-lastindex], buf[lastindex:totallen])
+				lastindex = 0
+				break
+			}
 
 			msghead, err2 := decodeMsgHeader(buf[lastindex : lastindex+MSG_HEAD_LEN])
 			if err2 != nil {
@@ -239,7 +307,9 @@ func msgrecvtask(conn net.Conn, s *Server) {
 			}
 
 			bodybegin := lastindex + MSG_HEAD_LEN
-			bodyend := bodybegin + msghead.bodysize
+			bodyend := bodybegin + int(msghead.BodySize)
+
+			//log.Println("msghead:", msghead)
 
 			if bodyend > totallen {
 				copy(buf[0:totallen-lastindex], buf[lastindex:totallen])
@@ -247,13 +317,13 @@ func msgrecvtask(conn net.Conn, s *Server) {
 				break
 			}
 
-			fun := gethandler(s, msghead.channel)
+			fun := gethandler(s, msghead.Channel)
 			if fun == nil {
 				log.Println("can not found channel handler!", msghead)
 				break
 			}
 
-			fun.ChanHandler(msghead.channel, buf[bodybegin:bodyend])
+			fun(msghead.Channel, buf[bodybegin:bodyend])
 
 			lastindex = bodyend
 		}
@@ -262,10 +332,28 @@ func msgrecvtask(conn net.Conn, s *Server) {
 
 func (s *Server) SendMsg(channel uint32, body []byte) error {
 
-	return
+	var msghead msgHeader
+
+	msghead.BodySize = uint32(len(body))
+	msghead.Channel = channel
+	msghead.MagicId = MAGIC_FLAG
+	msghead.RequestId = s.requestid
+
+	s.requestid++
+
+	buftemp, err := codeMsgHeader(msghead)
+	if err != nil {
+		return err
+	}
+
+	buftemp = append(buftemp, body...)
+
+	s.sendbuf <- buftemp
+
+	return nil
 }
 
-func (s *Server) RegHandler(channel uint32, fun Handler) error {
+func (s *Server) RegHandler(channel uint32, fun func(uint32, []byte)) error {
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
