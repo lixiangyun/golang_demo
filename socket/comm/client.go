@@ -1,54 +1,111 @@
 package comm
 
 import (
+	"log"
 	"net"
 	"sync"
 )
 
 type Client struct {
-	addr    string
-	conn    net.Conn
-	wait    sync.WaitGroup
-	sendbuf chan byte
+	addr      string
+	conn      net.Conn
+	requestid uint32
+	wait      sync.WaitGroup
+	handler   func(uint32, []byte)
+	sendbuf   chan []byte
 }
 
-func NewClient(addr string) *Client {
+func NewClient(addr string, handler func(uint32, []byte)) *Client {
 	c := Client{addr: addr}
-	c.sendbuf = make(chan byte, MAX_BUF_SIZE)
+	c.sendbuf = make(chan []byte, 1000)
+	c.handler = handler
 	return &c
 }
 
-func ClientRecv(conn net.Conn, wait *sync.WaitGroup) {
+func (c *Client) ClientRecv() {
 
-	defer wait.Done()
+	defer c.wait.Done()
 	var buf [MAX_BUF_SIZE]byte
+	var lastindex uint32
+	var totallen uint32
 
 	for {
-		cnt, err := conn.Read(buf[0:])
+
+		recvnum, err := c.conn.Read(buf[lastindex:])
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
 
-		recvmsgcnt++
-		recvmsgsize += cnt
+		totallen = lastindex + uint32(recvnum)
+
+		for {
+
+			if lastindex+MSG_HEAD_LEN > totallen {
+				copy(buf[0:totallen-lastindex], buf[lastindex:totallen])
+				lastindex = 0
+				break
+			}
+
+			msghead, err2 := decodeMsgHeader(buf[lastindex : lastindex+MSG_HEAD_LEN])
+			if err2 != nil {
+				log.Println(err2.Error())
+				break
+			}
+
+			bodybegin := lastindex + MSG_HEAD_LEN
+			bodyend := bodybegin + msghead.BodySize
+
+			if bodyend > totallen {
+				copy(buf[0:totallen-lastindex], buf[lastindex:totallen])
+				lastindex = 0
+				break
+			}
+
+			c.handler(msghead.Channel, buf[bodybegin:bodyend])
+
+			lastindex = bodyend
+		}
 	}
 }
 
-func ClientSend(conn net.Conn, wait *sync.WaitGroup) {
+func (c *Client) ClientSend() {
 
-	defer wait.Done()
+	defer c.wait.Done()
 	var buf [MAX_BUF_SIZE]byte
 
 	for {
-		cnt, err := conn.Read(buf[0:])
-		if err != nil {
-			log.Println(err.Error())
-			return
+
+		buflen := 0
+
+		tmpbuf := <-c.sendbuf
+		tmpbuflen := len(tmpbuf)
+
+		copy(buf[buflen:buflen+tmpbuflen], tmpbuf[0:])
+		buflen += tmpbuflen
+
+		chanlen := len(c.sendbuf)
+
+		for i := 0; i < chanlen; i++ {
+
+			tmpbuf = <-c.sendbuf
+			tmpbuflen = len(tmpbuf)
+
+			copy(buf[buflen:buflen+tmpbuflen], tmpbuf[0:])
+			buflen += tmpbuflen
+
+			if buflen > MAX_BUF_SIZE/2 {
+				break
+			}
 		}
 
-		recvmsgcnt++
-		recvmsgsize += cnt
+		if buflen > 0 {
+			err := FullyWrite(c.conn, buf[0:buflen])
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
+		}
 	}
 }
 
@@ -56,24 +113,19 @@ func (c *Client) Start() error {
 
 	var wait sync.WaitGroup
 
-	conn, err := net.Dial("tcp", IP+":"+PORT)
+	conn, err := net.Dial("tcp", c.addr)
 	if err != nil {
-		log.Println(err.Error())
-		return
+		return err
 	}
+
+	c.conn = conn
 
 	wait.Add(2)
 
-	go ClientSend(conn, &wait)
-	go ClientRecv(conn, &wait)
+	go c.ClientSend()
+	go c.ClientRecv()
 
-	for i := 0; i < 100; i++ {
-		time.Sleep(time.Second)
-	}
-
-	conn.Close()
-
-	wait.Wait()
+	return nil
 }
 
 func (c *Client) Stop() error {
@@ -84,22 +136,29 @@ func (c *Client) Stop() error {
 	}
 
 	c.wait.Wait()
+
+	return nil
 }
 
 func (c *Client) SendMsg(channel uint32, body []byte) error {
 
-	defer wait.Done()
-	var buf [MAX_BUF_SIZE]byte
+	var msghead msgHeader
 
-	for {
+	msghead.BodySize = uint32(len(body))
+	msghead.Channel = channel
+	msghead.MagicId = MAGIC_FLAG
+	msghead.RequestId = c.requestid
 
-		cnt, err := conn.Write(buf[0:sendbuflen])
-		if err != nil {
-			log.Println(err.Error())
-			return
-		}
+	c.requestid++
 
-		sendmsgcnt++
-		sendmsgsize += cnt
+	buftemp, err := codeMsgHeader(msghead)
+	if err != nil {
+		return err
 	}
+
+	buftemp = append(buftemp, body...)
+
+	c.sendbuf <- buftemp
+
+	return nil
 }
