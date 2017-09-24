@@ -26,7 +26,7 @@ type banchmark struct {
 }
 
 const (
-	MAX_BUF_SIZE = 1024 * 1024
+	MAX_BUF_SIZE = 128 * 1024
 )
 
 var banchmarktest [20]banchmark
