@@ -25,7 +25,114 @@ func serverhandler(channel uint32, body []byte) {
 		return
 	}
 
+	recvmsgcnt++
+	recvmsgsize += len(body)
+
+	sendmsgcnt++
+	sendmsgsize += len(body)
+
 	//log.Println("send buf to client!", channel, body)
+}
+
+var recvmsgcnt int
+var recvmsgsize int
+
+var sendmsgcnt int
+var sendmsgsize int
+
+var sendbuflen = 128
+
+type banchmark struct {
+	sendbuflen  int
+	recvmsgsize int
+}
+
+var banchmarktest [100]banchmark
+
+func netstat_client() {
+
+	num := 0
+
+	time.Sleep(time.Second)
+
+	log.Println("banch mark test start...")
+
+	lastrecvmsgcnt := recvmsgcnt
+	lastrecvmsgsize := recvmsgsize
+
+	lastsendmsgcnt := sendmsgcnt
+	lastsendmsgsize := sendmsgsize
+
+	for {
+
+		time.Sleep(time.Second)
+
+		log.Printf("Recv %d cnt/s , %.3f MB/s \r\n",
+			recvmsgcnt-lastrecvmsgcnt,
+			float32(recvmsgsize-lastrecvmsgsize)/(1024*1024))
+
+		log.Printf("Send %d cnt/s , %.3f MB/s \r\n",
+			sendmsgcnt-lastsendmsgcnt,
+			float32(sendmsgsize-lastsendmsgsize)/(1024*1024))
+
+		banchmarktest[num].sendbuflen = sendbuflen
+		banchmarktest[num].recvmsgsize = recvmsgsize - lastrecvmsgsize
+
+		num++
+
+		lastrecvmsgcnt = recvmsgcnt
+		lastrecvmsgsize = recvmsgsize
+
+		lastsendmsgcnt = sendmsgcnt
+		lastsendmsgsize = sendmsgsize
+
+		if sendbuflen*2 <= comm.MAX_BUF_SIZE/2 {
+			sendbuflen = sendbuflen * 2
+		} else {
+			sendbuflen = 128
+		}
+
+		if num >= len(banchmarktest) {
+			log.Println("banch mark test end.")
+			break
+		}
+	}
+
+	for _, v := range banchmarktest {
+
+		log.Printf("SendBufLen %d , %.3f MB/s \r\n",
+			v.sendbuflen, float32(v.recvmsgsize)/(1024*1024))
+	}
+
+	flag <- 0
+}
+
+func netstat_server() {
+
+	lastrecvmsgcnt := recvmsgcnt
+	lastrecvmsgsize := recvmsgsize
+
+	lastsendmsgcnt := sendmsgcnt
+	lastsendmsgsize := sendmsgsize
+
+	for {
+
+		time.Sleep(time.Second)
+
+		log.Printf("Recv %d cnt/s , %.3f MB/s \r\n",
+			recvmsgcnt-lastrecvmsgcnt,
+			float32(recvmsgsize-lastrecvmsgsize)/(1024*1024))
+
+		log.Printf("Send %d cnt/s , %.3f MB/s \r\n",
+			sendmsgcnt-lastsendmsgcnt,
+			float32(sendmsgsize-lastsendmsgsize)/(1024*1024))
+
+		lastrecvmsgcnt = recvmsgcnt
+		lastrecvmsgsize = recvmsgsize
+
+		lastsendmsgcnt = sendmsgcnt
+		lastsendmsgsize = sendmsgsize
+	}
 }
 
 func Server() {
@@ -44,26 +151,14 @@ func Server() {
 		return
 	}
 
-	for {
-		time.Sleep(time.Second)
-	}
+	netstat_server()
 
 	s.Stop()
 }
 
-var clientsendcnt int
-var clientrecvcnt int
-
 func clienthandler(channel uint32, body []byte) {
-	if len(body) == 16 {
-		clientrecvcnt++
-	}
-
-	if clientrecvcnt >= 100000 {
-		flag <- 0
-
-		log.Println("recv buf from server!", clientrecvcnt, body)
-	}
+	recvmsgcnt++
+	recvmsgsize += len(body)
 }
 
 func Client() {
@@ -78,19 +173,18 @@ func Client() {
 		return
 	}
 
-	var sendbuf [comm.MSG_HEAD_LEN]byte
+	go netstat_client()
 
-	sendbuf[0] = 255
-	sendbuf[comm.MSG_HEAD_LEN-1] = 254
+	var sendbuf [comm.MAX_BUF_SIZE]byte
 
-	for i := 0; i < 100000; i++ {
-		err = c.SendMsg(0, sendbuf[0:])
+	for {
+		err = c.SendMsg(0, sendbuf[0:sendbuflen])
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
-
-		clientsendcnt++
+		sendmsgcnt++
+		sendmsgsize += sendbuflen
 	}
 
 	<-flag
