@@ -3,6 +3,7 @@ package comm
 import (
 	"log"
 	"net"
+	"os"
 	"sync"
 )
 
@@ -26,24 +27,26 @@ func (c *Client) ClientRecv() {
 
 	defer c.wait.Done()
 	var buf [MAX_BUF_SIZE]byte
-	var lastindex uint32
-	var totallen uint32
+
+	var totallen int
 
 	for {
 
-		recvnum, err := c.conn.Read(buf[lastindex:])
+		var lastindex int
+
+		recvnum, err := c.conn.Read(buf[totallen:])
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
 
-		totallen = lastindex + uint32(recvnum)
+		totallen += recvnum
 
 		for {
 
 			if lastindex+MSG_HEAD_LEN > totallen {
 				copy(buf[0:totallen-lastindex], buf[lastindex:totallen])
-				lastindex = 0
+				totallen = totallen - lastindex
 				break
 			}
 
@@ -54,11 +57,22 @@ func (c *Client) ClientRecv() {
 			}
 
 			bodybegin := lastindex + MSG_HEAD_LEN
-			bodyend := bodybegin + msghead.BodySize
+			bodyend := bodybegin + int(msghead.BodySize)
+
+			if msghead.MagicId != MAGIC_FLAG {
+
+				log.Println("msghead_0:", msghead)
+				log.Println("totallen:", totallen)
+				log.Println("bodybegin:", bodybegin, " bodyend:", bodyend)
+				log.Println("body:", buf[lastindex:bodyend])
+				log.Println("bodyFull:", buf[0:totallen])
+				os.Exit(11)
+			}
 
 			if bodyend > totallen {
+
 				copy(buf[0:totallen-lastindex], buf[lastindex:totallen])
-				lastindex = 0
+				totallen = totallen - lastindex
 				break
 			}
 
@@ -76,13 +90,21 @@ func (c *Client) ClientSend() {
 
 	for {
 
-		buflen := 0
+		var buflen int
 
 		tmpbuf := <-c.sendbuf
 		tmpbuflen := len(tmpbuf)
 
-		copy(buf[buflen:buflen+tmpbuflen], tmpbuf[0:])
-		buflen += tmpbuflen
+		if tmpbuflen >= MAX_BUF_SIZE/2 {
+			err := FullyWrite(c.conn, tmpbuf[0:])
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
+		} else {
+			copy(buf[0:tmpbuflen], tmpbuf[0:])
+			buflen = tmpbuflen
+		}
 
 		chanlen := len(c.sendbuf)
 
@@ -94,8 +116,13 @@ func (c *Client) ClientSend() {
 			copy(buf[buflen:buflen+tmpbuflen], tmpbuf[0:])
 			buflen += tmpbuflen
 
-			if buflen > MAX_BUF_SIZE/2 {
-				break
+			if buflen >= MAX_BUF_SIZE/2 {
+				err := FullyWrite(c.conn, buf[0:buflen])
+				if err != nil {
+					log.Println(err.Error())
+					return
+				}
+				buflen = 0
 			}
 		}
 
