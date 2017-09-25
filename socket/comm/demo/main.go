@@ -86,6 +86,7 @@ func netstat_client() {
 		lastsendmsgcnt = sendmsgcnt
 		lastsendmsgsize = sendmsgsize
 
+		/**/
 		if sendbuflen*2 <= comm.MAX_BUF_SIZE/2 {
 			sendbuflen = sendbuflen * 2
 		} else {
