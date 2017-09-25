@@ -8,19 +8,9 @@ import (
 	"net"
 	"os"
 	"sync"
-	"time"
 )
 
-var recvmsgcnt int
-var recvmsgsize int
-
-var sendmsgcnt int
-var sendmsgsize int
-
-type banchmark struct {
-	sendbuflen  int
-	recvmsgsize int
-}
+type Handler func(uint32, []byte)
 
 const (
 	MAX_BUF_SIZE = 128 * 1024
@@ -33,83 +23,6 @@ type msgHeader struct {
 	Channel   uint32
 	RequestId uint32
 	BodySize  uint32
-}
-
-var banchmarktest [20]banchmark
-
-func netstat_client() {
-
-	num := 0
-
-	time.Sleep(time.Second)
-
-	log.Println("banch mark test start...")
-
-	lastrecvmsgcnt := recvmsgcnt
-	lastrecvmsgsize := recvmsgsize
-
-	lastsendmsgcnt := sendmsgcnt
-	lastsendmsgsize := sendmsgsize
-
-	for {
-
-		time.Sleep(time.Second)
-
-		log.Printf("Recv %d cnt/s , %.3f MB/s \r\n",
-			recvmsgcnt-lastrecvmsgcnt,
-			float32(recvmsgsize-lastrecvmsgsize)/(1024*1024))
-
-		log.Printf("Send %d cnt/s , %.3f MB/s \r\n",
-			sendmsgcnt-lastsendmsgcnt,
-			float32(sendmsgsize-lastsendmsgsize)/(1024*1024))
-
-		num++
-
-		lastrecvmsgcnt = recvmsgcnt
-		lastrecvmsgsize = recvmsgsize
-
-		lastsendmsgcnt = sendmsgcnt
-		lastsendmsgsize = sendmsgsize
-
-		if num >= len(banchmarktest) {
-			log.Println("banch mark test end.")
-			break
-		}
-	}
-
-	for _, v := range banchmarktest {
-
-		log.Printf("SendBufLen %d , %.3f MB/s \r\n",
-			v.sendbuflen, float32(v.recvmsgsize)/(1024*1024))
-	}
-}
-
-func netstat_server() {
-
-	lastrecvmsgcnt := recvmsgcnt
-	lastrecvmsgsize := recvmsgsize
-
-	lastsendmsgcnt := sendmsgcnt
-	lastsendmsgsize := sendmsgsize
-
-	for {
-
-		time.Sleep(time.Second)
-
-		log.Printf("Recv %d cnt/s , %.3f MB/s \r\n",
-			recvmsgcnt-lastrecvmsgcnt,
-			float32(recvmsgsize-lastrecvmsgsize)/(1024*1024))
-
-		log.Printf("Send %d cnt/s , %.3f MB/s \r\n",
-			sendmsgcnt-lastsendmsgcnt,
-			float32(sendmsgsize-lastsendmsgsize)/(1024*1024))
-
-		lastrecvmsgcnt = recvmsgcnt
-		lastrecvmsgsize = recvmsgsize
-
-		lastsendmsgcnt = sendmsgcnt
-		lastsendmsgsize = sendmsgsize
-	}
 }
 
 func FullyWrite(conn net.Conn, buf []byte) error {
@@ -140,7 +53,7 @@ type Server struct {
 	addr      string
 	requestid uint32
 	sendbuf   chan []byte
-	handler   map[uint32]func(uint32, []byte)
+	handler   map[uint32]Handler
 	listen    net.Listener
 	lock      sync.RWMutex
 	wait      sync.WaitGroup
@@ -151,8 +64,7 @@ func NewServer(addr string) *Server {
 	s := Server{addr: addr}
 
 	s.sendbuf = make(chan []byte, 1000)
-
-	s.handler = make(map[uint32]func(uint32, []byte), 100)
+	s.handler = make(map[uint32]Handler, 100)
 
 	return &s
 }
@@ -171,15 +83,16 @@ func (s *Server) Start() error {
 		defer s.wait.Done()
 
 		for {
+
 			conn, err := listen.Accept()
 			if err != nil {
 				log.Println(err.Error())
 				return
 			}
 
-			s.wait.Add(1)
-			go msgrecvtask(conn, s)
-			go msgsendtask(conn, s.sendbuf, s)
+			s.wait.Add(2)
+			go socketrecv(conn, s.handler[0], &s.wait)
+			go socketsend(conn, s.sendbuf, &s.wait)
 		}
 	}()
 
@@ -198,18 +111,6 @@ func (s *Server) Stop() error {
 	return nil
 }
 
-func gethandler(s *Server, channel uint32) func(uint32, []byte) {
-	s.lock.RLock()
-	fun, b := s.handler[channel]
-	s.lock.RUnlock()
-
-	if b == true {
-		return fun
-	} else {
-		return nil
-	}
-}
-
 func codeMsgHeader(req msgHeader) ([]byte, error) {
 	iobuf := new(bytes.Buffer)
 
@@ -223,17 +124,15 @@ func codeMsgHeader(req msgHeader) ([]byte, error) {
 
 func decodeMsgHeader(buf []byte) (rsp msgHeader, err error) {
 
-	//log.Println("buf : ", buf)
-
 	iobuf := bytes.NewReader(buf)
 	err = binary.Read(iobuf, binary.BigEndian, &rsp)
 
 	return
 }
 
-func msgsendtask(conn net.Conn, sendbuf chan []byte, s *Server) {
+func socketsend(conn net.Conn, sendbuf chan []byte, wait *sync.WaitGroup) {
 
-	defer s.wait.Done()
+	defer wait.Done()
 	var buf [MAX_BUF_SIZE]byte
 
 	for {
@@ -284,11 +183,12 @@ func msgsendtask(conn net.Conn, sendbuf chan []byte, s *Server) {
 	}
 }
 
-func msgrecvtask(conn net.Conn, s *Server) {
+func socketrecv(conn net.Conn, fun Handler, wait *sync.WaitGroup) {
 
 	var buf [MAX_BUF_SIZE]byte
 	var totallen int
 
+	defer wait.Done()
 	defer conn.Close()
 
 	for {
@@ -337,12 +237,6 @@ func msgrecvtask(conn net.Conn, s *Server) {
 				break
 			}
 
-			fun := gethandler(s, msghead.Channel)
-			if fun == nil {
-				log.Println("can not found channel handler!", msghead)
-				break
-			}
-
 			fun(msghead.Channel, buf[bodybegin:bodyend])
 
 			lastindex = bodyend
@@ -373,7 +267,7 @@ func (s *Server) SendMsg(channel uint32, body []byte) error {
 	return nil
 }
 
-func (s *Server) RegHandler(channel uint32, fun func(uint32, []byte)) error {
+func (s *Server) RegHandler(channel uint32, fun Handler) error {
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
