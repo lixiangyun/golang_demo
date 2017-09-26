@@ -10,7 +10,7 @@ import (
 	"sync"
 )
 
-type Handler func(uint32, []byte)
+type Handler func(uint32, uint32, []byte)
 
 const (
 	MAX_BUF_SIZE = 128 * 1024
@@ -50,65 +50,65 @@ func FullyWrite(conn net.Conn, buf []byte) error {
 }
 
 type Server struct {
-	addr      string
-	requestid uint32
-	sendbuf   chan []byte
-	handler   map[uint32]Handler
-	listen    net.Listener
-	lock      sync.RWMutex
-	wait      sync.WaitGroup
+	UserId uint32
+
+	sendbuf chan []byte
+	handler map[uint32]Handler
+	conn    net.Conn
+	wait    *sync.WaitGroup
 }
 
-func NewServer(addr string) *Server {
+type Listen struct {
+	id     uint32
+	listen net.Listener
+}
 
-	s := Server{addr: addr}
+func NewListen(addr string) *Listen {
+
+	listen, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Println(err.Error())
+		return nil
+	}
+
+	return &Listen{listen: listen}
+}
+
+func (l *Listen) Accept() (*Server, error) {
+
+	conn, err := l.listen.Accept()
+	if err != nil {
+		log.Println(err.Error())
+		return nil, err
+	}
+
+	s := new(Server)
 
 	s.sendbuf = make(chan []byte, 1000)
 	s.handler = make(map[uint32]Handler, 100)
+	s.conn = conn
+	s.UserId = l.id
+	s.wait = new(sync.WaitGroup)
 
-	return &s
+	l.id++
+
+	return s, nil
 }
 
-func (s *Server) Start() error {
+func (s *Server) Run() {
 
-	listen, err := net.Listen("tcp", s.addr)
-	if err != nil {
-		return err
-	}
+	s.wait.Add(2)
 
-	s.wait.Add(1)
+	go socketrecv(s.UserId, s.conn, s.handler, s.wait)
+	go socketsend(s.UserId, s.conn, s.sendbuf, s.wait)
 
-	go func() {
-
-		defer s.wait.Done()
-
-		for {
-
-			conn, err := listen.Accept()
-			if err != nil {
-				log.Println(err.Error())
-				return
-			}
-
-			s.wait.Add(2)
-			go socketrecv(conn, s.handler[0], &s.wait)
-			go socketsend(conn, s.sendbuf, &s.wait)
-		}
-	}()
-
-	return nil
+	s.Stop()
 }
 
-func (s *Server) Stop() error {
-
-	err := s.listen.Close()
-	if err != nil {
-		return err
-	}
-
+func (s *Server) Stop() {
 	s.wait.Wait()
-
-	return nil
+	s.conn.Close()
+	log.Println("shutdown!")
 }
 
 func codeMsgHeader(req msgHeader) ([]byte, error) {
@@ -130,7 +130,7 @@ func decodeMsgHeader(buf []byte) (rsp msgHeader, err error) {
 	return
 }
 
-func socketsend(conn net.Conn, sendbuf chan []byte, wait *sync.WaitGroup) {
+func socketsend(userid uint32, conn net.Conn, sendbuf chan []byte, wait *sync.WaitGroup) {
 
 	defer wait.Done()
 	var buf [MAX_BUF_SIZE]byte
@@ -183,13 +183,12 @@ func socketsend(conn net.Conn, sendbuf chan []byte, wait *sync.WaitGroup) {
 	}
 }
 
-func socketrecv(conn net.Conn, fun Handler, wait *sync.WaitGroup) {
+func socketrecv(userid uint32, conn net.Conn, funtable map[uint32]Handler, wait *sync.WaitGroup) {
 
 	var buf [MAX_BUF_SIZE]byte
 	var totallen int
 
 	defer wait.Done()
-	defer conn.Close()
 
 	for {
 
@@ -237,7 +236,12 @@ func socketrecv(conn net.Conn, fun Handler, wait *sync.WaitGroup) {
 				break
 			}
 
-			fun(msghead.Channel, buf[bodybegin:bodyend])
+			fun, b := funtable[msghead.Channel]
+			if b == true {
+				fun(userid, msghead.Channel, buf[bodybegin:bodyend])
+			} else {
+				log.Println("this channel id not found!", msghead.Channel)
+			}
 
 			lastindex = bodyend
 		}
@@ -251,9 +255,6 @@ func (s *Server) SendMsg(channel uint32, body []byte) error {
 	msghead.BodySize = uint32(len(body))
 	msghead.Channel = channel
 	msghead.MagicId = MAGIC_FLAG
-	msghead.RequestId = s.requestid
-
-	s.requestid++
 
 	buftemp, err := codeMsgHeader(msghead)
 	if err != nil {
@@ -268,9 +269,6 @@ func (s *Server) SendMsg(channel uint32, body []byte) error {
 }
 
 func (s *Server) RegHandler(channel uint32, fun Handler) error {
-
-	s.lock.Lock()
-	defer s.lock.Unlock()
 
 	_, b := s.handler[channel]
 	if b == true {
