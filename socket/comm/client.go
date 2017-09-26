@@ -1,27 +1,46 @@
 package comm
 
 import (
+	"errors"
 	"net"
 	"sync"
 )
 
 type Client struct {
-	addr      string
-	conn      net.Conn
-	requestid uint32
-	wait      sync.WaitGroup
-	handler   Handler
-	sendbuf   chan []byte
+	addr    string
+	conn    net.Conn
+	UserId  uint32
+	wait    sync.WaitGroup
+	handler map[uint32]Handler
+	sendbuf chan []byte
 }
 
-func NewClient(addr string, handler Handler) *Client {
-	c := Client{addr: addr}
+var id uint32
+
+func NewClient(addr string) *Client {
+	c := Client{addr: addr, UserId: id}
+
+	id++
+
 	c.sendbuf = make(chan []byte, 1000)
-	c.handler = handler
+	c.handler = make(map[uint32]Handler, 100)
+
 	return &c
 }
 
-func (c *Client) Start() error {
+func (s *Client) RegHandler(channel uint32, fun Handler) error {
+
+	_, b := s.handler[channel]
+	if b == true {
+		return errors.New("channel has been register!")
+	}
+
+	s.handler[channel] = fun
+
+	return nil
+}
+
+func (c *Client) Run() error {
 
 	conn, err := net.Dial("tcp", c.addr)
 	if err != nil {
@@ -31,8 +50,9 @@ func (c *Client) Start() error {
 	c.conn = conn
 
 	c.wait.Add(2)
-	go socketsend(c.conn, c.sendbuf, &c.wait)
-	go socketrecv(c.conn, c.handler, &c.wait)
+	go socketsend(c.UserId, c.conn, c.sendbuf, &c.wait)
+	go socketrecv(c.UserId, c.conn, c.handler, &c.wait)
+	c.wait.Wait()
 
 	return nil
 }
@@ -44,8 +64,6 @@ func (c *Client) Stop() error {
 		return err
 	}
 
-	c.wait.Wait()
-
 	return nil
 }
 
@@ -56,9 +74,6 @@ func (c *Client) SendMsg(channel uint32, body []byte) error {
 	msghead.BodySize = uint32(len(body))
 	msghead.Channel = channel
 	msghead.MagicId = MAGIC_FLAG
-	msghead.RequestId = c.requestid
-
-	c.requestid++
 
 	buftemp, err := codeMsgHeader(msghead)
 	if err != nil {
