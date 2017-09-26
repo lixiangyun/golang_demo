@@ -10,16 +10,17 @@ import (
 
 const (
 	IP   = "localhost"
-	PORT = "6060"
+	PORT = "1234"
 )
 
 var flag chan int
 
-var s *comm.Server
-var c *comm.Client
+var servertable map[uint32]*comm.Server
+var clienttable map[uint32]*comm.Client
 
-func serverhandler(channel uint32, body []byte) {
-	err := s.SendMsg(channel, body)
+func serverhandler(userid uint32, channel uint32, body []byte) {
+
+	err := servertable[userid].SendMsg(channel, body)
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -30,8 +31,6 @@ func serverhandler(channel uint32, body []byte) {
 
 	sendmsgcnt++
 	sendmsgsize += len(body)
-
-	//log.Println("send buf to client!", channel, body)
 }
 
 var recvmsgcnt int
@@ -86,13 +85,6 @@ func netstat_client() {
 		lastsendmsgcnt = sendmsgcnt
 		lastsendmsgsize = sendmsgsize
 
-		/**/
-		if sendbuflen*2 <= comm.MAX_BUF_SIZE/2 {
-			sendbuflen = sendbuflen * 2
-		} else {
-			sendbuflen = 128
-		}
-
 		if num >= len(banchmarktest) {
 			log.Println("banch mark test end.")
 			break
@@ -138,48 +130,53 @@ func netstat_server() {
 
 func Server() {
 
-	s = comm.NewServer(":" + PORT)
+	servertable = make(map[uint32]*comm.Server, 1000)
 
-	err := s.RegHandler(0, serverhandler)
-	if err != nil {
-		log.Println(err.Error())
-		return
+	list := comm.NewListen(":" + PORT)
+
+	go netstat_server()
+
+	var server *comm.Server
+	var err error
+
+	for {
+		server, err = list.Accept()
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+		server.RegHandler(0, serverhandler)
+
+		servertable[server.UserId] = server
+
+		go server.Run()
 	}
-
-	err = s.Start()
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	netstat_server()
-
-	s.Stop()
 }
 
-func clienthandler(channel uint32, body []byte) {
+func clienthandler(userid uint32, channel uint32, body []byte) {
 	recvmsgcnt++
 	recvmsgsize += len(body)
 }
 
 func Client() {
 
+	clienttable = make(map[uint32]*comm.Client, 1000)
+
 	flag = make(chan int)
 
-	c = comm.NewClient(IP+":"+PORT, clienthandler)
+	c := comm.NewClient(IP + ":" + PORT)
 
-	err := c.Start()
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
+	c.RegHandler(0, clienthandler)
 
+	clienttable[c.UserId] = c
+
+	go c.Run()
 	go netstat_client()
 
 	var sendbuf [comm.MAX_BUF_SIZE]byte
 
 	for {
-		err = c.SendMsg(0, sendbuf[0:sendbuflen])
+		err := c.SendMsg(0, sendbuf[0:sendbuflen])
 		if err != nil {
 			log.Println(err.Error())
 			return
