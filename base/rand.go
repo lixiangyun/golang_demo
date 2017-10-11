@@ -7,6 +7,7 @@ import (
 	"strconv"
 )
 
+// 写入value到指定的文件
 func writeValues(values []int, outfile string) error {
 	file, err := os.Create(outfile)
 	if err != nil {
@@ -32,6 +33,8 @@ func main() {
 	values := make([]int, 0)
 
 	for i := 0; i < 1000000; i++ {
+
+		// 构造随机数
 		_, err := rand.Read(r)
 		if err != nil {
 			fmt.Println("rand return failed!", err.Error())
@@ -47,5 +50,4 @@ func main() {
 	}
 
 	writeValues(values, "unsort.dat")
-
 }
