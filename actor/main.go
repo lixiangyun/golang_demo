@@ -11,31 +11,33 @@ import "strconv"
 import "runtime/pprof"
 
 type Msg struct {
-	send_fid  int
-	recv_fid  int
-	send_time time.Time
-	send_id   int
+	send_fid  int       // 发送的FID编号
+	recv_fid  int       // 接收的FID编号
+	send_time time.Time // 时间戳
+	send_id   int       // 消息ID
 }
 
 type FidInfo struct {
-	fid      int
-	recv_cnt int64
-	send_cnt int64
-	que      chan Msg
+	fid      int      // FID编号
+	recv_cnt int64    // 接收统计
+	send_cnt int64    // 发送统计
+	que      chan Msg // 消息接收缓存队列
 }
 
 type FidTable struct {
-	fidnum  int
-	quelen  int
-	oncemsg int
-	fidinfo map[int]*FidInfo
-	waitgo  chan int
+	fidnum  int              // FID数量
+	quelen  int              // 队列长度
+	oncemsg int              // 单次发送消息的数量
+	fidinfo map[int]*FidInfo // FID信息
+	waitgo  chan int         // 等待退出的通道
 }
 
+// 延时函数
 func RunDelay(sec int) {
 	time.Sleep(time.Duration(sec) * time.Second)
 }
 
+// 累计接收的消息总和
 func RecvMsgNum(fidtable *FidTable) int64 {
 	var totalnum int64 = 0
 
@@ -46,6 +48,7 @@ func RecvMsgNum(fidtable *FidTable) int64 {
 	return totalnum
 }
 
+// 累计发送的消息总和
 func SendMsgNum(fidtable *FidTable) int64 {
 	var totalnum int64 = 0
 
@@ -56,6 +59,7 @@ func SendMsgNum(fidtable *FidTable) int64 {
 	return totalnum
 }
 
+// 申请一个新FID实例
 func NewFidTable(fidnum, quelen, oncemsg int) *FidTable {
 	var fidtable FidTable
 
@@ -76,6 +80,7 @@ func NewFidTable(fidnum, quelen, oncemsg int) *FidTable {
 	return &fidtable
 }
 
+// 根据FID编号获取指定的FID实例
 func GetFidInfo(fidtable *FidTable, fid int) *FidInfo {
 
 	v, ok := fidtable.fidinfo[fid]
@@ -87,6 +92,7 @@ func GetFidInfo(fidtable *FidTable, fid int) *FidInfo {
 	}
 }
 
+// 向指定FID批量发送消息
 func SendToMsg(fidtable *FidTable, send_fid, recv_fid, send_id, oncemsg int) {
 
 	fidinfo := GetFidInfo(fidtable, recv_fid)
@@ -102,6 +108,7 @@ func SendToMsg(fidtable *FidTable, send_fid, recv_fid, send_id, oncemsg int) {
 	}
 }
 
+// FID接收处理协程
 func RecvToMsg(fidtable *FidTable, fid int) {
 
 	var recv_fid int
@@ -145,6 +152,7 @@ func RecvToMsg(fidtable *FidTable, fid int) {
 	fidtable.waitgo <- fid
 }
 
+// 启动FID接收实例
 func StartRecvMsg(fidtable *FidTable) {
 
 	for i := 0; i < fidtable.fidnum; i++ {
@@ -156,6 +164,7 @@ func StartRecvMsg(fidtable *FidTable) {
 	}
 }
 
+// 停止FID实例
 func EndRecvMsg(fidtable *FidTable) {
 	for i := 0; i < fidtable.fidnum; i++ {
 		SendToMsg(fidtable, 0, i, -1, 1)
@@ -166,6 +175,7 @@ func EndRecvMsg(fidtable *FidTable) {
 	}
 }
 
+// 启动性能测试
 func StatPerfm(fidtable *FidTable, totalsec int, delaysec int) {
 
 	fmt.Println("start stat fid proccess speed...")
