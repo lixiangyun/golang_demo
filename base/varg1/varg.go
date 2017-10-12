@@ -2,6 +2,7 @@ package main
 
 import "fmt"
 
+// 动态参数传递实例
 func MyPrintf(args ...interface{}) {
 	for _, v := range args {
 		switch v.(type) {
