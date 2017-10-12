@@ -4,7 +4,7 @@ package main
 
 import "os"
 import "fmt"
-import "simplemath"
+import "golang_demo/calcproj/simplemath"
 import "strconv"
 
 var Usage = func() {
