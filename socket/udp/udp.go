@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-const (
-	IP   = "192.168.0.107"
-	PORT = "8081"
-)
-
 var recvmsgcnt int
 var recvmsgsize int
 
@@ -52,8 +47,8 @@ func msgProc(conn *net.UDPConn) {
 
 }
 
-func Server() {
-	addr, err := net.ResolveUDPAddr("udp", ":"+PORT)
+func Server(port string) {
+	addr, err := net.ResolveUDPAddr("udp", port)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -76,8 +71,8 @@ func Server() {
 	}
 }
 
-func Client() {
-	conn, err := net.Dial("udp", IP+":"+PORT)
+func Client(addr string) {
+	conn, err := net.Dial("udp", addr)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -99,14 +94,15 @@ func Client() {
 func main() {
 	args := os.Args
 
-	if len(args) < 2 {
-		fmt.Println("Usage: <-s/-c>")
+	if len(args) < 3 {
+		fmt.Println("Usage: <-s/-c> <ip:port>")
+		return
 	}
 
 	switch args[1] {
 	case "-s":
-		Server()
+		Server(args[2])
 	case "-c":
-		Client()
+		Client(args[2])
 	}
 }
