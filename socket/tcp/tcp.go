@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-const (
-	IP   = "localhost"
-	PORT = "6060"
-)
-
 var recvmsgcnt int
 var recvmsgsize int
 
@@ -140,9 +135,9 @@ func msgProc(conn net.Conn) {
 	}
 }
 
-func Server() {
+func Server(addr string) {
 
-	listen, err := net.Listen("tcp", ":"+PORT)
+	listen, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -197,11 +192,11 @@ func ClientRecv(conn net.Conn, wait *sync.WaitGroup) {
 	}
 }
 
-func Client() {
+func Client(addr string) {
 
 	var wait sync.WaitGroup
 
-	conn, err := net.Dial("tcp", IP+":"+PORT)
+	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		log.Println(err.Error())
 		return
@@ -228,14 +223,15 @@ func main() {
 
 	args := os.Args
 
-	if len(args) < 2 {
-		log.Println("Usage: <-s/-c>")
+	if len(args) < 3 {
+		log.Println("Usage: <-s/-c> <ip:port>")
+		return
 	}
 
 	switch args[1] {
 	case "-s":
-		Server()
+		Server(args[2])
 	case "-c":
-		Client()
+		Client(args[2])
 	}
 }
