@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
@@ -72,7 +73,13 @@ func gethtmlbody(path string, proxy string) ([]byte, error) {
 		proxy := func(_ *http.Request) (*url.URL, error) {
 			return url.Parse(proxy)
 		}
-		transport = &http.Transport{Proxy: proxy}
+
+		if strings.Index(path, "https") != -1 {
+			transport = &http.Transport{Proxy: proxy,
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		} else {
+			transport = &http.Transport{Proxy: proxy}
+		}
 	}
 
 	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
@@ -104,22 +111,10 @@ func gethtmlbody(path string, proxy string) ([]byte, error) {
 func getcvebody(buf []byte) string {
 	body := string(buf[:])
 
-	head := "&nbsp;&nbsp;<p>"
-	tail := "</div>"
+	head := "<p data-testid=\"vuln-description\">"
+	tail := "</p>"
 
 	begin := strings.Index(body, head)
-	if begin != -1 {
-		end := strings.Index(body[begin:], tail)
-		if end != -1 {
-			cutbody := body[begin+len(head) : begin+end]
-			return parse(cutbody)
-		}
-	}
-
-	head = "[原文]</span>"
-	tail = "</p>"
-
-	begin = strings.Index(body, head)
 	if begin != -1 {
 		end := strings.Index(body[begin:], tail)
 		if end != -1 {
@@ -159,21 +154,33 @@ func getcvelist(filename string) ([]string, error) {
 func getcveall(in chan string, out chan string) {
 
 	for {
-		v, b := <-in
+		oneline, b := <-in
 		if b == false {
 			log.Println("close go routine.")
 			return
 		}
-		log.Println("get cve body : ", v)
 
-		buf, err := gethtmlbody("http://cve.scap.org.cn/"+v+".html", "http://10.177.16.233:808")
-		if err != nil {
-			log.Println("gethtmlbody : ", v, err.Error())
-			out <- fmt.Sprintf("%s get body failed!", v)
-			continue
+		log.Println("get cve body : ", oneline)
+
+		vlist := strings.Split(oneline, ",")
+		var output string
+
+		for _, cve := range vlist {
+			if strings.Index(cve, "CVE") == -1 {
+				continue
+			}
+
+			buf, err := gethtmlbody("https://nvd.nist.gov/vuln/detail/"+cve, "http://10.177.16.233:808")
+			if err != nil {
+				log.Println("gethtmlbody : ", cve, err.Error())
+				output += fmt.Sprintf("%s Get Body Failed! \r\n", cve)
+				continue
+			}
+			body := getcvebody(buf)
+			output += fmt.Sprintf("%s\t%s \r\n", cve, body)
 		}
-		body := getcvebody(buf)
-		out <- fmt.Sprintf("%s\t%s", v, body)
+
+		out <- output
 	}
 }
 
