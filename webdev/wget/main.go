@@ -3,14 +3,47 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
+	"os"
 	"time"
 )
+
+var (
+	help     bool
+	crtcheck bool
+	filename string
+	proxy    string
+	path     string
+	timeout  int
+)
+
+func usage() {
+	fmt.Fprintf(os.Stderr,
+		`wget version: 1.0
+Usage: wget [-h] [-c] [-t second] [-o filename] [-p proxy] [-u url]
+
+Options:
+`)
+	flag.PrintDefaults()
+}
+
+func init() {
+
+	flag.BoolVar(&help, "h", false, "this help")
+	flag.BoolVar(&crtcheck, "c", false, "validate the server's certificate")
+	flag.StringVar(&filename, "o", "", "output the body filename")
+	flag.StringVar(&proxy, "p", "", "the proxy server url")
+	flag.StringVar(&path, "u", "", "the URL need to get")
+	flag.IntVar(&timeout, "t", 0, "timeout for get by tcp connect")
+
+	flag.Usage = usage
+
+}
 
 func readFully(conn io.ReadCloser) ([]byte, error) {
 	result := bytes.NewBuffer(nil)
@@ -30,24 +63,24 @@ func readFully(conn io.ReadCloser) ([]byte, error) {
 	return result.Bytes(), nil
 }
 
-func gethtmlbody(path string, proxy string) ([]byte, error) {
+func gethtmlbody() ([]byte, error) {
 
 	var transport *http.Transport
 
+	transport = new(http.Transport)
+
 	if proxy != "" {
-		proxy := func(_ *http.Request) (*url.URL, error) {
+		proxyfunc := func(_ *http.Request) (*url.URL, error) {
 			return url.Parse(proxy)
 		}
-
-		if strings.Index(path, "https") != -1 {
-			transport = &http.Transport{Proxy: proxy,
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-		} else {
-			transport = &http.Transport{Proxy: proxy}
-		}
+		transport.Proxy = proxyfunc
 	}
 
-	client := &http.Client{Transport: transport, Timeout: 10 * time.Second}
+	if crtcheck == false {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+
+	client := &http.Client{Transport: transport, Timeout: time.Duration(timeout) * time.Second}
 
 	var err error
 	var resp *http.Response
@@ -73,13 +106,36 @@ func gethtmlbody(path string, proxy string) ([]byte, error) {
 	return buf, nil
 }
 
+func SaveFile(body []byte) {
+	file, err := os.Create(filename)
+	if err != nil {
+		fmt.Errorf("create file failed!", filename)
+		return
+	}
+
+	defer file.Close()
+
+	file.Write(body)
+}
+
 func main() {
 
-	body, err := gethtmlbody("https://www.google.com", "http://127.0.0.1:8080")
+	flag.Parse()
+
+	if help {
+		flag.Usage()
+		return
+	}
+
+	body, err := gethtmlbody()
 	if err != nil {
 		log.Println(err.Error())
 		return
 	}
 
-	fmt.Println(string(body[:]))
+	if filename != "" {
+
+	} else {
+		fmt.Fprintln(os.Stdout, string(body[:]))
+	}
 }
