@@ -1,0 +1,111 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"strings"
+	"time"
+)
+
+func format(filename string) {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	buf := make([]byte, 0)
+
+	for {
+
+		var buftmp [128]byte
+
+		cnt, err := file.Read(buftmp[:])
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Println(err.Error())
+			return
+		}
+
+		buf = append(buf, buftmp[:cnt]...)
+	}
+
+	file.Close()
+
+	var output string
+
+	strbuf := strings.Split(string(buf), "\r\n")
+
+	for _, v := range strbuf {
+		if v[0] != '(' {
+			output += fmt.Sprintf("- **%s**</br>\r\n", v)
+		} else {
+			tail := strings.Index(v, ")")
+			if -1 == tail {
+				log.Println("Tail -1")
+				return
+			}
+
+			header := string(v[1:tail])
+
+			cat := strings.Index(header, ",")
+
+			if -1 == cat {
+				output += fmt.Sprintf("\t([%s](#))%s\r\n\r\n", header, string(v[tail+1:]))
+			} else {
+				output += fmt.Sprintf("\t([%s](#),%s)%s\r\n\r\n", string(header[:cat]), string(header[cat+1:]), string(v[tail+1:]))
+			}
+		}
+	}
+
+	fmt.Print(output)
+
+	file, err = os.OpenFile(filename, os.O_WRONLY, 0)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	file.WriteString(output)
+
+	file.Close()
+}
+
+func main() {
+
+	filename := "all.txt"
+
+	format(filename)
+
+	lastinfo, err := os.Stat(filename)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	for {
+
+		time.Sleep(1 * time.Second)
+
+		tempinfo, err := os.Stat(filename)
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		if tempinfo.ModTime() != lastinfo.ModTime() {
+
+			format(filename)
+
+			lastinfo, err = os.Stat(filename)
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
+		}
+	}
+}
