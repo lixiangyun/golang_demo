@@ -40,24 +40,66 @@ func format(filename string) {
 
 	strbuf := strings.Split(string(buf), "\r\n")
 
+	bcode := false
+
 	for _, v := range strbuf {
-		if v[0] != '(' {
-			output += fmt.Sprintf("- **%s**</br>\r\n", v)
-		} else {
-			tail := strings.Index(v, ")")
-			if -1 == tail {
-				log.Println("Tail -1")
-				return
+
+		if len(v) == 0 {
+			output += fmt.Sprintf("\r\n")
+			continue
+		}
+
+		if bcode {
+			output += fmt.Sprintf("%s\r\n", v)
+			if v[0] == '}' {
+				output += fmt.Sprintf("```\r\n")
+				bcode = false
 			}
+			continue
+		}
 
-			header := string(v[1:tail])
+		switch v[0] {
+		case '(':
+			{
+				tail := strings.Index(v, ")")
+				if -1 == tail {
+					log.Println("Tail -1")
+					return
+				}
 
-			cat := strings.Index(header, ",")
+				header := string(v[1:tail])
 
-			if -1 == cat {
-				output += fmt.Sprintf("\t([%s](#))%s\r\n\r\n", header, string(v[tail+1:]))
-			} else {
-				output += fmt.Sprintf("\t([%s](#),%s)%s\r\n\r\n", string(header[:cat]), string(header[cat+1:]), string(v[tail+1:]))
+				cat := strings.Index(header, ",")
+
+				if -1 == cat {
+					output += fmt.Sprintf("\t([%s](#))%s\r\n\r\n", header, string(v[tail+1:]))
+				} else {
+					output += fmt.Sprintf("\t([%s](#),%s)%s\r\n\r\n", string(header[:cat]), string(header[cat+1:]), string(v[tail+1:]))
+				}
+
+				bcode = false
+			}
+		case '[':
+			{
+				output += fmt.Sprintf("%s()\r\n", v)
+				bcode = false
+			}
+		case '{':
+			{
+				bcode = true
+				output += fmt.Sprintf("```\r\n%s\r\n", v)
+			}
+		default:
+			{
+				if v[0] >= 'a' && v[0] <= 'z' {
+					output += fmt.Sprintf("- **%s**</br>\r\n", v)
+				} else if strings.Index(v, ".") != -1 {
+					output += fmt.Sprintf("%s\r\n", v)
+				} else {
+					output += fmt.Sprintf("### %s\r\n", v)
+				}
+
+				bcode = false
 			}
 		}
 	}
@@ -71,6 +113,8 @@ func format(filename string) {
 	}
 
 	file.WriteString(output)
+
+	file.Sync()
 
 	file.Close()
 }
