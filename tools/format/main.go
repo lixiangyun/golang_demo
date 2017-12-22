@@ -51,7 +51,7 @@ func format(filename string) {
 
 		if bcode {
 			output += fmt.Sprintf("%s\r\n", v)
-			if v[0] == '}' {
+			if v[0] == '}' || v[0] == ']' {
 				output += fmt.Sprintf("```\r\n")
 				bcode = false
 			}
@@ -71,16 +71,6 @@ func format(filename string) {
 
 				link := "#"
 
-				if strings.Index(header, "BoolValue") != -1 {
-					link = "https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#boolvalue"
-				} else if strings.Index(header, "UInt32Value") != -1 {
-					link = "https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#uint32value"
-				} else if strings.Index(header, "string") != -1 || strings.Index(header, "uint32") != -1 {
-					link = "https://developers.google.com/protocol-buffers/docs/proto#scalar"
-				} else if strings.Index(header, "Duration") != -1 {
-					link = "https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#duration"
-				}
-
 				if -1 != strings.Index(header, "DEFAULT") {
 					output += fmt.Sprintf("\t(%s)%s\r\n\r\n", header, string(v[tail+1:]))
 				} else {
@@ -97,8 +87,13 @@ func format(filename string) {
 			}
 		case '[':
 			{
-				output += fmt.Sprintf("%s()\r\n", v)
-				bcode = false
+				bcode = true
+				output += fmt.Sprintf("```\r\n%s\r\n", v)
+
+				if -1 != strings.Index(v, "]") {
+					output += fmt.Sprintf("```\r\n")
+					bcode = false
+				}
 			}
 		case '{':
 			{
