@@ -59,7 +59,7 @@ func main() {
 
 		if len(output) != 0 {
 
-			strtmp := fmt.Sprintf("(../../%s.md)\r\n", string(output))
+			strtmp := fmt.Sprintf("(../%s.md)\r\n", string(output))
 			output = []byte(strtmp)
 
 		} else {
