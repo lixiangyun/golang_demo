@@ -108,7 +108,7 @@ func format(filename string) {
 		default:
 			{
 				if v[0] >= 'a' && v[0] <= 'z' && strings.Index(v, ".") == -1 {
-					output += fmt.Sprintf("- **%s**</br>\r\n", v)
+					output += fmt.Sprintf("- **%s**<br />\r\n", v)
 				} else if strings.Index(v, ".") != -1 && strings.Index(v, " ") != -1 {
 					output += fmt.Sprintf("%s\r\n", v)
 				} else {

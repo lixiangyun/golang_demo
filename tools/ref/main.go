@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"unicode"
 )
 
 func OpenFile(filename string) ([]byte, error) {
@@ -13,9 +14,7 @@ func OpenFile(filename string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	defer fd.Close()
-
 	var body []byte
 	for {
 		var tmp [128]byte
@@ -28,7 +27,6 @@ func OpenFile(filename string) ([]byte, error) {
 		}
 		body = append(body, tmp[:cnt]...)
 	}
-
 	return body, nil
 }
 
@@ -36,7 +34,6 @@ func SaveFile(filename string, body []byte) error {
 
 	var fd *os.File
 	var err error
-
 	for {
 		fd, err = os.Create(filename)
 		if err == nil {
@@ -50,9 +47,7 @@ func SaveFile(filename string, body []byte) error {
 			return err
 		}
 	}
-
 	defer fd.Close()
-
 	cnt := 0
 	for {
 		num, err := fd.Write(body[cnt:])
@@ -64,7 +59,6 @@ func SaveFile(filename string, body []byte) error {
 			break
 		}
 	}
-
 	return nil
 }
 
@@ -92,15 +86,17 @@ func Format(input string) string {
 	return string(output)
 }
 
+func headcheck(b rune) bool {
+	if unicode.IsLetter(b) || unicode.IsNumber(b) {
+		return true
+	}
+	return false
+}
+
 func main() {
 
-	if len(os.Args) != 2 {
-		fmt.Println("Usage : <input.md> ")
-		return
-	}
-
-	input := os.Args[1]
-	output := os.Args[1]
+	input := "all.txt"
+	output := "all.txt"
 
 	body, err := OpenFile(input)
 	if err != nil {
@@ -108,44 +104,48 @@ func main() {
 		return
 	}
 
-	log.Println("read file success!")
-
 	linelist := strings.Split(string(body[:]), "\r\n")
 
 	var outbody string
 
-	for _, line := range linelist {
+	for idx, line := range linelist {
+
+		var benum bool
+
 		if len(line) == 0 {
-			outbody += fmt.Sprintf("\r\n")
+			if idx+1 != len(linelist) {
+				outbody += fmt.Sprintf("\r\n")
+			}
 			continue
 		}
 
-		begin := strings.Index(line, "](#")
-		if begin == -1 {
-			outbody += fmt.Sprintf("%s\r\n", line)
+		enum := strings.Index(line, "Enum")
+		if enum != -1 {
+			benum = true
+			line = line[:enum]
+		}
+
+		begin := strings.IndexFunc(line, headcheck)
+		end := strings.LastIndexFunc(line, headcheck)
+
+		if end == -1 || begin == -1 {
+			if idx+1 != len(linelist) {
+				outbody += fmt.Sprintf("%s\r\n", line)
+			} else {
+				outbody += fmt.Sprintf("%s", line)
+			}
 			continue
 		}
 
-		begin += 3
-		end := strings.Index(line[begin:], ")")
-		if end == -1 {
-			outbody += fmt.Sprintf("%s\r\n", line)
-			continue
+		title := line[begin : end+1]
+
+		if benum {
+			fmt.Printf("%s (Enum)\r\n", title)
+			outbody += fmt.Sprintf("- [%s (Enum)](#%s-enum)\r\n", title, Format(title))
+		} else {
+			fmt.Printf("%s\r\n", title)
+			outbody += fmt.Sprintf("- [%s](#%s)\r\n", title, Format(title))
 		}
-		end += begin
-
-		if end == begin {
-			outbody += fmt.Sprintf("%s\r\n", line)
-
-			log.Println(line)
-			continue
-		}
-
-		fmt.Printf("%s\r\n", line)
-		fmt.Println(begin, end)
-
-		outbody += fmt.Sprintf("%s%s%s\r\n", line[:begin], Format(line[begin:end]), line[end:])
-
 	}
 
 	err = SaveFile(output, []byte(outbody))
