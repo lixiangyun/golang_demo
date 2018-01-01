@@ -4,9 +4,40 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 )
 
+func getprefix() string {
+
+	os.Stdout.Write([]byte("Please input prefix length [0~10]. \r\n"))
+
+	var input [1024]byte
+	cnt, err := os.Stdin.Read(input[:])
+	if err != nil {
+		log.Println("error: ", err.Error())
+		return "../"
+	}
+
+	num, err := strconv.Atoi(string(input[:cnt-2]))
+	if err != nil {
+		log.Println("error: ", err.Error())
+		return "../"
+	}
+
+	var prefix string
+
+	for i := 0; i < num; i++ {
+		prefix += "../"
+	}
+
+	return prefix
+}
+
 func main() {
+
+	prefix := getprefix()
+
+	fmt.Println("use the prefix : ", prefix)
 
 	for {
 		var input [1024]byte
@@ -59,7 +90,7 @@ func main() {
 
 		if len(output) != 0 {
 
-			strtmp := fmt.Sprintf("(../%s.md)\r\n", string(output))
+			strtmp := fmt.Sprintf("(%s%s.md)\r\n", prefix, string(output))
 			output = []byte(strtmp)
 
 		} else {

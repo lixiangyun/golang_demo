@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"unicode"
 )
 
 func OpenFile(filename string) ([]byte, error) {
@@ -72,22 +73,34 @@ func Format(input string) string {
 
 	input = strings.ToLower(input)
 
+	fmt.Printf("%s\r\n", input)
+
 	inputbody := []byte(input)
 
 	output := make([]byte, 0)
 
+	var clean bool
+
 	for _, v := range inputbody {
 
-		if v == ' ' {
-			output = append(output, '-')
-		} else if v == '.' {
+		if v == '(' {
+			clean = true
+		} else if v == ')' {
+			clean = false
+		}
+
+		if clean {
 			continue
-		} else if v == '(' || v == ')' {
-			continue
-		} else {
+		}
+
+		if unicode.IsLetter(rune(v)) || unicode.IsSpace(rune(v)) {
+			output = append(output, v)
+		} else if v == ',' {
 			output = append(output, v)
 		}
 	}
+
+	fmt.Printf("%s\r\n", string(output))
 
 	return string(output)
 }
@@ -126,31 +139,33 @@ func main() {
 			continue
 		}
 
-		begin := strings.Index(line, "(#")
+		if -1 != strings.Index(line, "<") || -1 != strings.Index(line, ">") {
+			outbody += fmt.Sprintf("%s%s", line, enter)
+			continue
+		}
+
+		begin := strings.Index(line, "([")
 		if begin == -1 {
 			outbody += fmt.Sprintf("%s%s", line, enter)
 			continue
 		}
 
-		begin += 2
-		end := strings.Index(line[begin:], ")")
+		begin2 := strings.Index(line, ",")
+		if begin2 == -1 {
+			outbody += fmt.Sprintf("%s%s", line, enter)
+			continue
+		}
+
+		end := strings.Index(line[begin2:], ")")
 		if end == -1 {
 			outbody += fmt.Sprintf("%s%s", line, enter)
 			continue
 		}
-		end += begin
+		end += begin2 + 1
 
-		if end == begin {
-			outbody += fmt.Sprintf("%s%s", line, enter)
-
-			log.Println(line)
-			continue
-		}
-
-		fmt.Printf("%s\r\n", line)
-		fmt.Println(begin, end)
-
-		outbody += fmt.Sprintf("%s%s%s%s", line[:begin], Format(line[begin:end]), line[end:], enter)
+		outbody += fmt.Sprintf("%s(%s)%s%s", line[:begin],
+			Format(line[begin+1:end-1]),
+			line[end:], enter)
 	}
 
 	err = SaveFile(output, []byte(outbody))
