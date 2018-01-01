@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
-	"unicode"
+	"time"
 )
 
 func OpenFile(filename string) ([]byte, error) {
@@ -69,52 +69,18 @@ func SaveFile(filename string, body []byte) error {
 	return nil
 }
 
-func Format(input string) string {
-
-	input = strings.ToLower(input)
-
-	fmt.Printf("%s\r\n", input)
-
-	inputbody := []byte(input)
-
-	output := make([]byte, 0)
-
-	var clean bool
-
-	for _, v := range inputbody {
-
-		if v == '(' {
-			clean = true
-		} else if v == ')' {
-			clean = false
+func swap(input, oldvalue, newvalue string) string {
+	for {
+		idx := strings.Index(input, oldvalue)
+		if idx == -1 {
+			return input
 		}
-
-		if clean {
-			continue
-		}
-
-		if unicode.IsLetter(rune(v)) || unicode.IsSpace(rune(v)) {
-			output = append(output, v)
-		} else if v == ',' {
-			output = append(output, v)
-		}
+		input = fmt.Sprintf("%s%s%s", input[:idx], newvalue, input[idx+len(oldvalue):])
 	}
-
-	fmt.Printf("%s\r\n", string(output))
-
-	return string(output)
+	return input
 }
 
-func main() {
-
-	if len(os.Args) != 2 {
-		fmt.Println("Usage : <input.md> ")
-		return
-	}
-
-	input := os.Args[1]
-	output := os.Args[1]
-
+func process(input, output string) {
 	body, err := OpenFile(input)
 	if err != nil {
 		log.Println(err.Error())
@@ -139,33 +105,11 @@ func main() {
 			continue
 		}
 
-		if -1 != strings.Index(line, "<") || -1 != strings.Index(line, ">") {
-			outbody += fmt.Sprintf("%s%s", line, enter)
-			continue
-		}
+		line = swap(line, " ", "")
+		line = swap(line, "特使", "Envoy")
+		line = swap(line, "侦听器", "监听器")
 
-		begin := strings.Index(line, "([")
-		if begin == -1 {
-			outbody += fmt.Sprintf("%s%s", line, enter)
-			continue
-		}
-
-		begin2 := strings.Index(line, ",")
-		if begin2 == -1 {
-			outbody += fmt.Sprintf("%s%s", line, enter)
-			continue
-		}
-
-		end := strings.Index(line[begin2:], ")")
-		if end == -1 {
-			outbody += fmt.Sprintf("%s%s", line, enter)
-			continue
-		}
-		end += begin2 + 1
-
-		outbody += fmt.Sprintf("%s(%s)%s%s", line[:begin],
-			Format(line[begin+1:end-1]),
-			line[end:], enter)
+		outbody += fmt.Sprintf("%s%s", line, enter)
 	}
 
 	err = SaveFile(output, []byte(outbody))
@@ -173,4 +117,24 @@ func main() {
 		log.Println(err.Error())
 		return
 	}
+}
+
+func main() {
+
+	input := "data.txt"
+	output := "data2.txt"
+
+	lasttime, _ := os.Stat(input)
+
+	for {
+
+		time.Sleep(1 * time.Second)
+		newtime, _ := os.Stat(input)
+
+		if lasttime.ModTime() != newtime.ModTime() {
+			process(input, output)
+			lasttime, _ = os.Stat(input)
+		}
+	}
+
 }
