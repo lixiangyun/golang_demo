@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 )
 
 func OpenFile(filename string) ([]byte, error) {
@@ -80,6 +81,35 @@ func swap(input, oldvalue, newvalue string) string {
 	return input
 }
 
+func addchar(input string) string {
+	output := make([]rune, 0)
+	var chars bool
+	var begin bool
+	for _, v := range input {
+		if chars == false {
+			if unicode.IsLower(v) {
+				output = append(output, '`')
+				chars = true
+				begin = true
+			} else if unicode.IsUpper(v) {
+				chars = true
+			}
+		} else {
+			if !unicode.IsLower(v) && !unicode.IsUpper(v) {
+				if v != '_' && v != '-' {
+					chars = false
+					if begin {
+						output = append(output, '`')
+						begin = false
+					}
+				}
+			}
+		}
+		output = append(output, v)
+	}
+	return string(output)
+}
+
 func process(input, output string) {
 	body, err := OpenFile(input)
 	if err != nil {
@@ -108,8 +138,9 @@ func process(input, output string) {
 		line = swap(line, " ", "")
 		line = swap(line, "特使", "Envoy")
 		line = swap(line, "侦听器", "监听器")
+		line = swap(line, "跨度", "span")
 
-		outbody += fmt.Sprintf("%s%s", line, enter)
+		outbody += fmt.Sprintf("%s%s", addchar(line), enter)
 	}
 
 	err = SaveFile(output, []byte(outbody))
