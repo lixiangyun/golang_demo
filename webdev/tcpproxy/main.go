@@ -2,28 +2,38 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"os"
 )
 
 // 实际中应该用更好的变量名
 var (
-	bridge     bool
-	link       bool
-	tcpproxy   bool
+	mode string
+
 	remoteaddr string
 	localaddr  string
 	help       bool
 )
 
+func usage() {
+	fmt.Fprintf(os.Stderr, `tcpproxy version: tcpproxy/0.1.0
+Usage: tcpproxy [-hm] [-local ip:port] [-remote ip:port]
+
+Options:
+`)
+	flag.PrintDefaults()
+}
+
 func init() {
 	flag.BoolVar(&help, "h", false, "this help")
 
-	flag.BoolVar(&bridge, "b", false, "using bridge mode.")
-	flag.BoolVar(&link, "l", false, "using link connect mode.")
-	flag.BoolVar(&tcpproxy, "t", false, "using tcp proxy mode.")
+	flag.StringVar(&mode, "m", "proxy", "using bridge/link/proxy mode.")
 
 	flag.StringVar(&remoteaddr, "remote", "", "remote addr")
 	flag.StringVar(&localaddr, "local", "", "local addr")
+
+	flag.Usage = usage
 }
 
 func main() {
@@ -35,7 +45,7 @@ func main() {
 		return
 	}
 
-	if tcpproxy {
+	if mode == "proxy" {
 
 		if remoteaddr != "" && localaddr != "" {
 			proxy := NewTcpProxy(localaddr, remoteaddr)
@@ -47,7 +57,7 @@ func main() {
 			return
 		}
 
-	} else if bridge {
+	} else if mode == "bridge" {
 
 		if remoteaddr != "" && localaddr != "" {
 			proxy := NewTcpBridge(localaddr, remoteaddr)
@@ -58,7 +68,7 @@ func main() {
 			}
 			return
 		}
-	} else if link {
+	} else if mode == "link" {
 
 		if remoteaddr != "" && localaddr != "" {
 			proxy := NewTcpBridge(localaddr, remoteaddr)
