@@ -11,6 +11,8 @@ import (
 var (
 	mode string
 
+	pools uint
+
 	remoteaddr string
 	localaddr  string
 	help       bool
@@ -18,7 +20,7 @@ var (
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `tcpproxy version: tcpproxy/0.1.0
-Usage: tcpproxy [-hm] [-local ip:port] [-remote ip:port]
+Usage: tcpproxy [-h] [-m bridge/link/proxy] [-pools num] [-local ip:port] [-remote ip:port]
 
 Options:
 `)
@@ -29,15 +31,14 @@ func init() {
 	flag.BoolVar(&help, "h", false, "this help")
 
 	flag.StringVar(&mode, "m", "proxy", "using bridge/link/proxy mode.")
-
-	flag.StringVar(&remoteaddr, "remote", "", "remote addr")
-	flag.StringVar(&localaddr, "local", "", "local addr")
+	flag.UintVar(&pools, "pools", 10, "using connect num on link/bridge mode.")
+	flag.StringVar(&remoteaddr, "remote", "", "connect to remote address.")
+	flag.StringVar(&localaddr, "local", "", "connect to local address.")
 
 	flag.Usage = usage
 }
 
 func main() {
-
 	flag.Parse()
 
 	if help {
@@ -46,37 +47,27 @@ func main() {
 	}
 
 	if mode == "proxy" {
-
 		if remoteaddr != "" && localaddr != "" {
 			proxy := NewTcpProxy(localaddr, remoteaddr)
-
 			err := proxy.Start()
 			if err != nil {
 				log.Println(err.Error())
 			}
 			return
 		}
-
 	} else if mode == "bridge" {
-
 		if remoteaddr != "" && localaddr != "" {
 			proxy := NewTcpBridge(localaddr, remoteaddr)
-
-			err := proxy.Bridge()
+			err := proxy.Bridge(int(pools))
 			if err != nil {
 				log.Println(err.Error())
 			}
 			return
 		}
 	} else if mode == "link" {
-
 		if remoteaddr != "" && localaddr != "" {
 			proxy := NewTcpBridge(localaddr, remoteaddr)
-
-			err := proxy.Link()
-			if err != nil {
-				log.Println(err.Error())
-			}
+			proxy.LinkPools(int(pools))
 			return
 		}
 	}

@@ -32,6 +32,7 @@ func writeFull(conn net.Conn, buf []byte) error {
 	}
 }
 
+// tcp通道互通
 func tcpChannel(localconn net.Conn, remoteconn net.Conn, wait *sync.WaitGroup) {
 
 	defer wait.Done()
@@ -59,6 +60,7 @@ func tcpChannel(localconn net.Conn, remoteconn net.Conn, wait *sync.WaitGroup) {
 	}
 }
 
+// tcp代理处理
 func tcpProxyProcess(localconn net.Conn, remoteconn net.Conn) {
 
 	syncSem := new(sync.WaitGroup)
@@ -75,6 +77,7 @@ func tcpProxyProcess(localconn net.Conn, remoteconn net.Conn) {
 	log.Println("close connect. ", localconn.RemoteAddr(), " -> ", remoteconn.RemoteAddr())
 }
 
+// 正向tcp代理启动和处理入口
 func (t *TcpProxy) Start() error {
 
 	listen, err := net.Listen("tcp", t.ListenAddr)
