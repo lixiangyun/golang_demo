@@ -1,30 +1,44 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"strings"
+	//"strings"
+	"time"
 )
 
-type Pxy struct{}
+var HTTP_PROXY string = ":808"
 
-func (p *Pxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+type proxy struct{}
+
+func (*proxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+
 	fmt.Printf("Received request %s %s %s\n", req.Method, req.Host, req.RemoteAddr)
 
-	transport := http.DefaultTransport
+	fmt.Println(req)
+
+	var transport *http.Transport
+
+	transport = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second}
+
+	transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	// step 1
 	outReq := new(http.Request)
 	*outReq = *req // this only does shallow copies of maps
-
-	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
-		if prior, ok := outReq.Header["X-Forwarded-For"]; ok {
-			clientIP = strings.Join(prior, ", ") + ", " + clientIP
-		}
-		outReq.Header.Set("X-Forwarded-For", clientIP)
-	}
 
 	// step 2
 	res, err := transport.RoundTrip(outReq)
@@ -46,7 +60,6 @@ func (p *Pxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	fmt.Println("Serve on :8080")
-	http.Handle("/", &Pxy{})
-	http.ListenAndServe("0.0.0.0:8080", nil)
+
+	http.ListenAndServe(HTTP_PROXY, &proxy{})
 }
