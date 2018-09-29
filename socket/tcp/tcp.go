@@ -1,137 +1,51 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net"
-	"os"
-	"runtime"
 	"sync"
 	"time"
 )
 
-var recvmsgcnt int
-var recvmsgsize int
-
-var sendmsgcnt int
-var sendmsgsize int
-
-type banchmark struct {
-	sendbuflen  int
-	recvmsgsize int
-}
-
-const (
-	MAX_BUF_SIZE = 128 * 1024
+var (
+	ADDRESS      string
+	PARALLEL_NUM int
+	RUNTIME      int
+	BODY_LENGTH  int
+	ROLE         string
+	h            bool
 )
 
-var banchmarktest [20]banchmark
+var gStat *Stat
 
-func netstat_client() {
-
-	num := 0
-
-	time.Sleep(time.Second)
-
-	log.Println("banch mark test start...")
-
-	lastrecvmsgcnt := recvmsgcnt
-	lastrecvmsgsize := recvmsgsize
-
-	lastsendmsgcnt := sendmsgcnt
-	lastsendmsgsize := sendmsgsize
-
-	for {
-
-		time.Sleep(time.Second)
-
-		log.Printf("Recv %d cnt/s , %.3f MB/s \r\n",
-			recvmsgcnt-lastrecvmsgcnt,
-			float32(recvmsgsize-lastrecvmsgsize)/(1024*1024))
-
-		log.Printf("Send %d cnt/s , %.3f MB/s \r\n",
-			sendmsgcnt-lastsendmsgcnt,
-			float32(sendmsgsize-lastsendmsgsize)/(1024*1024))
-
-		banchmarktest[num].sendbuflen = sendbuflen
-		banchmarktest[num].recvmsgsize = recvmsgsize - lastrecvmsgsize
-
-		num++
-
-		lastrecvmsgcnt = recvmsgcnt
-		lastrecvmsgsize = recvmsgsize
-
-		lastsendmsgcnt = sendmsgcnt
-		lastsendmsgsize = sendmsgsize
-
-		if sendbuflen*2 <= MAX_BUF_SIZE {
-			sendbuflen = sendbuflen * 2
-		}
-
-		if num >= len(banchmarktest) {
-			log.Println("banch mark test end.")
-			break
-		}
-	}
-
-	for _, v := range banchmarktest {
-
-		log.Printf("SendBufLen %d , %.3f MB/s \r\n",
-			v.sendbuflen, float32(v.recvmsgsize)/(1024*1024))
-	}
+func init() {
+	flag.StringVar(&ROLE, "r", "s", "the tools role (s/c).")
+	flag.IntVar(&PARALLEL_NUM, "p", 1, "parallel tcp connect.")
+	flag.IntVar(&RUNTIME, "t", 30, "total run time (second).")
+	flag.IntVar(&BODY_LENGTH, "l", 64, "transport body length (KB).")
+	flag.StringVar(&ADDRESS, "b", "127.0.0.1:8010", "set the service address.")
+	flag.BoolVar(&h, "h", false, "this help.")
 }
 
-func netstat_server() {
-
-	lastrecvmsgcnt := recvmsgcnt
-	lastrecvmsgsize := recvmsgsize
-
-	lastsendmsgcnt := sendmsgcnt
-	lastsendmsgsize := sendmsgsize
-
-	for {
-
-		time.Sleep(time.Second)
-
-		log.Printf("Recv %d cnt/s , %.3f MB/s \r\n",
-			recvmsgcnt-lastrecvmsgcnt,
-			float32(recvmsgsize-lastrecvmsgsize)/(1024*1024))
-
-		log.Printf("Send %d cnt/s , %.3f MB/s \r\n",
-			sendmsgcnt-lastsendmsgcnt,
-			float32(sendmsgsize-lastsendmsgsize)/(1024*1024))
-
-		lastrecvmsgcnt = recvmsgcnt
-		lastrecvmsgsize = recvmsgsize
-
-		lastsendmsgcnt = sendmsgcnt
-		lastsendmsgsize = sendmsgsize
-	}
-}
-
-func msgProc(conn net.Conn) {
-
-	var buf [MAX_BUF_SIZE]byte
-
+func ServerProc(conn net.Conn) {
 	defer conn.Close()
 
+	buf := make([]byte, BODY_LENGTH)
+
 	for {
-		n, err := conn.Read(buf[0:])
+		cnt, err := conn.Read(buf[0:])
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
+		gStat.Add(cnt, 0)
 
-		recvmsgcnt++
-		recvmsgsize += n
-
-		n, err = conn.Write(buf[0:n])
+		cnt, err = conn.Write(buf[0:cnt])
 		if err != nil {
 			log.Println(err.Error())
-			return
+			break
 		}
-
-		sendmsgcnt++
-		sendmsgsize += n
 	}
 }
 
@@ -143,57 +57,43 @@ func Server(addr string) {
 		return
 	}
 
-	go netstat_server()
-
 	for {
 		conn, err2 := listen.Accept()
 		if err2 != nil {
 			log.Println(err.Error())
 			continue
 		}
-		go msgProc(conn)
+		go ServerProc(conn)
 	}
 }
 
-var sendbuflen = 128
-
 func ClientSend(conn net.Conn, wait *sync.WaitGroup) {
-
 	defer wait.Done()
-	var buf [MAX_BUF_SIZE]byte
+	buf := make([]byte, BODY_LENGTH)
 
 	for {
-
-		cnt, err := conn.Write(buf[0:sendbuflen])
+		_, err := conn.Write(buf[:])
 		if err != nil {
-			log.Println(err.Error())
 			return
 		}
-
-		sendmsgcnt++
-		sendmsgsize += cnt
 	}
 }
 
 func ClientRecv(conn net.Conn, wait *sync.WaitGroup) {
-
 	defer wait.Done()
-	var buf [MAX_BUF_SIZE]byte
+	buf := make([]byte, BODY_LENGTH)
 
 	for {
 		cnt, err := conn.Read(buf[0:])
 		if err != nil {
-			log.Println(err.Error())
 			return
 		}
-
-		recvmsgcnt++
-		recvmsgsize += cnt
+		gStat.Add(cnt, 0)
 	}
 }
 
-func Client(addr string) {
-
+func ClientConn(addr string, client *sync.WaitGroup) {
+	defer client.Done()
 	var wait sync.WaitGroup
 
 	conn, err := net.Dial("tcp", addr)
@@ -201,37 +101,45 @@ func Client(addr string) {
 		log.Println(err.Error())
 		return
 	}
-
 	wait.Add(2)
 
 	go ClientSend(conn, &wait)
 	go ClientRecv(conn, &wait)
-	go netstat_client()
 
-	for i := 0; i < 100; i++ {
-		time.Sleep(time.Second)
-	}
-
+	time.Sleep(time.Duration(RUNTIME) * time.Second)
 	conn.Close()
 
 	wait.Wait()
 }
 
+func Client(addr string) {
+	var wait sync.WaitGroup
+	wait.Add(PARALLEL_NUM)
+	for i := 0; i < PARALLEL_NUM; i++ {
+		go ClientConn(addr, &wait)
+	}
+	wait.Wait()
+}
+
 func main() {
 
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	args := os.Args
-
-	if len(args) < 3 {
-		log.Println("Usage: <-s/-c> <ip:port>")
+	flag.Parse()
+	if h || (ROLE != "s" && ROLE != "c") {
+		flag.Usage()
 		return
 	}
+	BODY_LENGTH = BODY_LENGTH * 1024
 
-	switch args[1] {
-	case "-s":
-		Server(args[2])
-	case "-c":
-		Client(args[2])
+	gStat = NewStat(5)
+
+	switch ROLE {
+	case "s":
+		gStat.Prefix("tcp server")
+		Server(ADDRESS)
+	case "c":
+		gStat.Prefix("tcp client")
+		Client(ADDRESS)
 	}
+
+	gStat.Delete()
 }
