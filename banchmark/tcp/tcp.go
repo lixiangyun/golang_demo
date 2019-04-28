@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"log"
 	"net"
@@ -34,17 +35,24 @@ func ServerProc(conn net.Conn) {
 	buf := make([]byte, BODY_LENGTH)
 
 	for {
-		cnt, err := conn.Read(buf[0:])
+		readcnt, err := conn.Read(buf[0:])
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
-		gStat.Add(cnt, 0)
+		gStat.Add(readcnt, 0)
 
-		cnt, err = conn.Write(buf[0:cnt])
-		if err != nil {
-			log.Println(err.Error())
-			break
+		var sendcnt int
+		for {
+			cnt, err := conn.Write(buf[sendcnt:readcnt])
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
+			sendcnt += cnt
+			if sendcnt >= readcnt {
+				break
+			}
 		}
 	}
 }
@@ -69,27 +77,66 @@ func Server(addr string) {
 
 func ClientSend(conn net.Conn, wait *sync.WaitGroup) {
 	defer wait.Done()
+	var sendidx uint64
+
 	buf := make([]byte, BODY_LENGTH)
+	num := BODY_LENGTH / 8
 
 	for {
-		_, err := conn.Write(buf[:])
-		if err != nil {
-			return
+
+		for i := 0; i < num; i++ {
+			sendidx++
+			binary.BigEndian.PutUint64(buf[i*8:(i+1)*8], sendidx)
+		}
+
+		var sendcnt int
+		for {
+			cnt, err := conn.Write(buf[:])
+			if err != nil {
+				return
+			}
+			sendcnt += cnt
+			if sendcnt >= len(buf) {
+				break
+			}
 		}
 	}
 }
 
 func ClientRecv(conn net.Conn, wait *sync.WaitGroup) {
 	defer wait.Done()
+
+	var sendidx uint64
 	buf := make([]byte, BODY_LENGTH)
 
+	var remain int
+
 	for {
-		cnt, err := conn.Read(buf[0:])
+		cnt, err := conn.Read(buf[remain:])
 		if err != nil {
 			return
 		}
-		gStat.Add(cnt, 0)
+		remain += cnt
+
+		if remain%8 == 0 {
+			num := remain / 8
+			for i := 0; i < num; i++ {
+				idx := binary.BigEndian.Uint64(buf[i*8 : (i+1)*8])
+				if idx != sendidx+1 {
+					log.Fatalln("recv err body data!", idx, sendidx)
+				}
+				sendidx = idx
+			}
+
+			gStat.Add(remain, 0)
+			remain = 0
+		}
 	}
+}
+
+func ClientTimer(conn net.Conn) {
+	time.Sleep(time.Duration(RUNTIME) * time.Second)
+	conn.Close()
 }
 
 func ClientConn(addr string, client *sync.WaitGroup) {
@@ -105,9 +152,7 @@ func ClientConn(addr string, client *sync.WaitGroup) {
 
 	go ClientSend(conn, &wait)
 	go ClientRecv(conn, &wait)
-
-	time.Sleep(time.Duration(RUNTIME) * time.Second)
-	conn.Close()
+	go ClientTimer(conn)
 
 	wait.Wait()
 }
