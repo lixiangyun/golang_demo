@@ -80,9 +80,9 @@ func codeLineSum(root string, done chan bool) {
 			}
 			goes++
 			if fi.IsDir() {
-				go codeLineSum(root+"/"+fi.Name(), godone)
+				go codeLineSum(root+string(os.PathSeparator)+fi.Name(), godone)
 			} else {
-				go readfile(root+"/"+fi.Name(), godone)
+				go readfile(root+string(os.PathSeparator)+fi.Name(), godone)
 			}
 		}
 	} else {
