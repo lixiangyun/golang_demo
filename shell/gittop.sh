@@ -1,6 +1,34 @@
 #!/bin/bash
 
 
+GET_TOP_CPU()
+{
+    # 根据需要进行修改
+    TOPNUM=5
+    
+    OUTPUT=""
+    INDEX=-1
+    IFS=$'\n'
+    for cpu in `top -s -bn 1 |grep -A $((TOPNUM)) "COMMAND"`; do
+        INDEX=$(($INDEX+1))
+        if [ $INDEX -eq 0 ]; then
+            continue
+        fi
+        cpu_pid=`echo $cpu|awk '{print $1}'`
+        cpu_usage=`echo $cpu|awk '{print $9}'`
+        cpu_commond=`echo $cpu|awk '{print $12}'`
+        
+        if [ $(echo "$cpu_usage > 0.0" | bc) = 1 ]; then
+            TEMP=`echo "TOP$INDEX: PID=$cpu_pid CPU=$cpu_usage% CMD=$cpu_commond \n"`
+            OUTPUT=${OUTPUT}${TEMP}
+        fi
+        if [ $INDEX -gt $TOPNUM ]; then
+            break
+        fi
+    done
+    
+    echo -e $OUTPUT
+}
 
 GET_TOP_MEM()
 {
@@ -56,8 +84,8 @@ GET_TOP_MEM()
                 MAX_USAGE=$temp_usage
             fi
         done
-		
-		length=$(echo $MAX_KEY|wc -c)
+        
+        length=$(echo $MAX_KEY|wc -c)
         if [ $length -eq 1 ];then
             continue
         fi
@@ -142,3 +170,4 @@ GET_TOP_DISK()
 
 GET_TOP_MEM
 GET_TOP_DISK
+GET_TOP_CPU
