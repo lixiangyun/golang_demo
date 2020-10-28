@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-func CreateShortcut(dst, src string) error {
+func CreateShortcut(dst, src, icon string) error {
 	err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
 	if err != nil {
 		return err
@@ -37,8 +37,17 @@ func CreateShortcut(dst, src string) error {
 	defer idispatch.Release()
 
 	oleutil.PutProperty(idispatch, "TargetPath", src)
-	oleutil.CallMethod(idispatch, "Save")
+	oleutil.PutProperty(idispatch, "IconLocation", icon)
 
+	oleutil.PutProperty(idispatch, "WindowStyle", 7)
+	oleutil.PutProperty(idispatch, "Minimized", 7)
+	oleutil.PutProperty(idispatch, "Maximized", 0)
+	oleutil.PutProperty(idispatch, "Normal", 4)
+
+	oleutil.PutProperty(idispatch, "WorkingDirectory", 0)
+	oleutil.PutProperty(idispatch, "Arguments", "-c config")
+
+	oleutil.CallMethod(idispatch, "Save")
 	return nil
 }
 
@@ -56,28 +65,36 @@ func CurPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s\\%s", dir, os.Args[0]), nil
+	return dir, nil
 }
 
 func main()  {
+	args := os.Args[1:]
+	if len(args) > 0 {
+		fmt.Printf("cmd: %v\n", args)
+	}
+
 	path, err := DeskTopPath()
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
-	src, err := CurPath()
+	srcDir, err := CurPath()
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
+
+	src := fmt.Sprintf("%s\\%s", srcDir, os.Args[0])
+	icon := fmt.Sprintf("%s\\icons.ico", srcDir)
 
 	dest := fmt.Sprintf("%s\\Demo.lnk", path)
 
 	fmt.Println(dest)
 	fmt.Println(src)
 
-	err = CreateShortcut(dest, src)
+	err = CreateShortcut(dest, src, icon)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
