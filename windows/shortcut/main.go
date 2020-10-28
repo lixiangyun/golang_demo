@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 /*
@@ -23,7 +24,7 @@ import (
 	Arguments:获取一个 WshArgument 对象的集合
 */
 
-func CreateShortcut(dst, src, icon string) error {
+func CreateShortcut(dst, src, icon string, pwd string) error {
 	err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
 	if err != nil {
 		return err
@@ -58,7 +59,7 @@ func CreateShortcut(dst, src, icon string) error {
 	oleutil.PutProperty(idispatch, "Maximized", 0)
 	oleutil.PutProperty(idispatch, "Normal", 4)
 
-	oleutil.PutProperty(idispatch, "WorkingDirectory", 0)
+	oleutil.PutProperty(idispatch, "WorkingDirectory", pwd)
 	oleutil.PutProperty(idispatch, "Arguments", "-c config")
 
 	oleutil.CallMethod(idispatch, "Save")
@@ -103,6 +104,7 @@ func CurPath() (string, error) {
 	return dir, nil
 }
 
+
 func main()  {
 	args := os.Args[1:]
 	if len(args) > 0 {
@@ -136,9 +138,13 @@ func main()  {
 	fmt.Println(src)
 	fmt.Println(startup)
 
-	err = CreateShortcut(dest, src, icon)
+	err = CreateShortcut(dest, src, icon, srcDir)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
+	}
+
+	for  {
+		time.Sleep(time.Hour)
 	}
 }
