@@ -7,7 +7,21 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 )
+
+/*
+	Windows Scripting Host 为我们提供了一个 WshShortcut 对象，可以使用此对象来创建快捷方式或获取快捷方式的信息
+	WshShortcut 有以下属性：
+	TargetPath:获取或设置快捷方式指向的目标文件的路径
+	FullName:获取或设置快捷方式的路径
+	Description:获取或设置快捷方式的说明
+	IconLocation:获取或设置快捷方式图标的位置
+	WindowStyle:获取或设置启动目标程序时所使用的窗口样式
+	HotKey:获取或设置用于启动目标程序的热键，只热键只能激活 WINDOWS 桌面和开始菜单中的快捷方式
+	WorkingDirectory:获取或设置目标程序的工作目录
+	Arguments:获取一个 WshArgument 对象的集合
+*/
 
 func CreateShortcut(dst, src, icon string) error {
 	err := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
@@ -59,6 +73,27 @@ func DeskTopPath() (string, error) {
 	return fmt.Sprintf("%s\\Desktop", ur.HomeDir), nil
 }
 
+func AppName() string {
+	path := os.Args[0]
+	idx := strings.LastIndex(path, "\\")
+	if idx != -1 {
+		return path[idx+1:]
+	}
+	return path
+}
+
+func StartUpPath() (string, error) {
+	dir := os.Getenv("APPDATA")
+	path := fmt.Sprintf("%s\\Microsoft\\Windows\\Start Menu\\Programs\\Startup", dir)
+	file, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if file.IsDir() {
+		return path, nil
+	}
+	return "", fmt.Errorf("path is not dir")
+}
 
 func CurPath() (string, error) {
 	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
@@ -74,11 +109,11 @@ func main()  {
 		fmt.Printf("cmd: %v\n", args)
 	}
 
-	path, err := DeskTopPath()
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
+	//path, err := DeskTopPath()
+	//if err != nil {
+	//	fmt.Println(err.Error())
+	//	return
+	//}
 
 	srcDir, err := CurPath()
 	if err != nil {
@@ -86,13 +121,20 @@ func main()  {
 		return
 	}
 
-	src := fmt.Sprintf("%s\\%s", srcDir, os.Args[0])
-	icon := fmt.Sprintf("%s\\icons.ico", srcDir)
+	startup, err := StartUpPath()
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 
-	dest := fmt.Sprintf("%s\\Demo.lnk", path)
+	src := fmt.Sprintf("%s\\%s", srcDir, AppName())
+	icon := fmt.Sprintf("%s\\icons.ico", srcDir)
+	//dest := fmt.Sprintf("%s\\Demo.lnk", path)
+	dest := fmt.Sprintf("%s\\Demo.lnk", startup)
 
 	fmt.Println(dest)
 	fmt.Println(src)
+	fmt.Println(startup)
 
 	err = CreateShortcut(dest, src, icon)
 	if err != nil {

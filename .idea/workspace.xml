@@ -20,7 +20,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="05624295-3838-44a0-9e57-dca6007759e8" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/windows/shortcut/icons.ico" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/windows/shortcut/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/windows/shortcut/main.go" afterDir="false" />
     </list>
