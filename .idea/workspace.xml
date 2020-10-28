@@ -20,14 +20,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="05624295-3838-44a0-9e57-dca6007759e8" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/golang_tools.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/echo/demo/main.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/echo/demo/rbac_model.conf" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/echo/demo/rbac_policy.csv" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/windows/openfile/main.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/windows/shortcut/main.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
