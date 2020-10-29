@@ -13,16 +13,12 @@ func (p *program) Start(s service.Service) error {
 }
 
 func (p *program) run() {
-	// 代码写在这儿
+	logger.Info("running")
 }
 
 func (p *program) Stop(s service.Service) error {
 	return nil
 }
-
-/**
-* MAIN函数，程序入口
- */
 
 func main() {
 	svcConfig := &service.Config{
