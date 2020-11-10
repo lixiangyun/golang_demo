@@ -2,8 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"math/rand"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -98,6 +101,9 @@ func ClientRecv(conn net.Conn, wait *sync.WaitGroup) {
 func ClientConn(addr string, remote string, client *sync.WaitGroup) {
 	defer client.Done()
 	var wait sync.WaitGroup
+
+	list := strings.Split(addr,":")
+	addr = fmt.Sprintf("%s:%d", list[0], rand.Int()%50000 )
 
 	localAdd, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
