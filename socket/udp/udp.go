@@ -1,59 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"time"
-
-	"github.com/google/uuid"
 )
-
-func GetUUID() string {
-	return uuid.New().String()
-}
-
-type Clients struct {
-	Address string `json:"address"`
-	UUID    string `json:"uuid"`
-}
-
-type AddressList struct {
-	List []Clients `json:"list"`
-}
-
-var gClients AddressList
-
-func init()  {
-	gClients.List = make([]Clients, 0)
-}
-
-func AddClient(id string, address string)  {
-	for idx, v:= range gClients.List {
-		if v.UUID == id {
-			gClients.List[idx].Address = address
-			return
-		}
-	}
-	gClients.List = append(gClients.List, Clients{UUID: id, Address: address})
-}
-
-func SyncClient(body []byte)  {
-	err := json.Unmarshal(body, &gClients)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-}
-
-func GetClient() []byte {
-	body, err := json.Marshal(&gClients)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-	return body
-}
 
 func Server(port string) {
 	addr, err := net.ResolveUDPAddr("udp", port)
@@ -61,7 +14,6 @@ func Server(port string) {
 		fmt.Println(err.Error())
 		return
 	}
-
 	conn, err2 := net.ListenUDP("udp", addr)
 	if err2 != nil {
 		fmt.Println(err.Error())
@@ -78,31 +30,11 @@ func Server(port string) {
 				return
 			}
 		}
-		fmt.Printf("client : %s, address: %s\n", string(buf[:cnt]), addr.String())
-		AddClient(string(buf[:cnt]), addr.String())
-		conn.WriteToUDP(GetClient(), addr)
+		conn.WriteToUDP(buf[:cnt], addr)
 	}
-}
-
-var clientID string
-
-func Client2Client(conn *net.UDPConn, address string, body []byte)  {
-	addr, err := net.ResolveUDPAddr("udp", address)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	_, err = conn.WriteToUDP(body, addr)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	fmt.Printf("send to client %s success\n", addr.String())
 }
 
 func Client(addr string, local string) {
-	clientID = GetUUID()
-
 	localaddr, err := net.ResolveUDPAddr("udp", local)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -125,27 +57,16 @@ func Client(addr string, local string) {
 
 	go func() {
 		for {
-			writebuff := []byte(clientID)
+			writebuff := []byte("hello world!")
 			cnt, err := conn.WriteToUDP(writebuff[:], remoteaddr)
 			if err != nil {
 				fmt.Println(err.Error())
+				return
 			}
 			if cnt > 0 {
 				fmt.Printf("send to server %s success\n", remoteaddr.String())
 			}
-			time.Sleep(5*time.Second)
-		}
-	}()
-
-	go func() {
-		for  {
-			for _, v:= range gClients.List {
-				if v.UUID != clientID {
-					body := fmt.Sprintf("hello world from: %s", clientID)
-					Client2Client(conn, v.Address, []byte(body))
-				}
-			}
-			time.Sleep(5*time.Second)
+			time.Sleep(time.Millisecond)
 		}
 	}()
 
@@ -153,13 +74,11 @@ func Client(addr string, local string) {
 
 	for  {
 		cnt, addr, err := conn.ReadFromUDP(readbuff[:])
-		if addr.String() == remoteaddr.String() {
-			SyncClient(readbuff[:cnt])
-		} else {
-			fmt.Printf("client recv : %s %s\n", addr.String(), string(readbuff[:cnt]))
-		}
+		fmt.Printf("client from: %s %s\n", addr.String(), string(readbuff[:cnt]))
+
 		if err != nil {
 			fmt.Println(err.Error())
+			return
 		}
 	}
 }
